@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { fetchBooks, createBook, createTransaction, checkHealth } from './api';
+import { fetchBooks, createBook, createTransaction, checkHealth, fetchHistory } from './api';
 import './App.css';
 
 function App() {
@@ -7,7 +7,9 @@ function App() {
   const [health, setHealth] = useState('Checking...');
   const [showAddModal, setShowAddModal] = useState(false);
   const [showTxModal, setShowTxModal] = useState(false);
+  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedBook, setSelectedBook] = useState(null);
+  const [history, setHistory] = useState([]);
   const [newBook, setNewBook] = useState({ title: '', author: '', category: '', location: '' });
   const [txData, setTxData] = useState({ type: 'IMPORT', quantity: 1 });
 
@@ -46,6 +48,13 @@ function App() {
     }
   };
 
+  const openHistory = async (book) => {
+    setSelectedBook(book);
+    const data = await fetchHistory(book.id);
+    setHistory(data);
+    setShowHistoryModal(true);
+  };
+
   return (
     <div className="app-container">
       <header>
@@ -72,11 +81,12 @@ function App() {
                   <strong>{book.title}</strong>
                   <div style={{ fontSize: '0.8rem', color: '#94a3b8' }}>{book.author} | {book.location}</div>
                 </div>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '1rem' }}>
-                  <span className={book.stock < 5 ? 'low-stock' : ''}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                  <span className={book.stock < 5 ? 'low-stock' : ''} style={{ marginRight: '10px' }}>
                     {book.stock} cuốn
                   </span>
-                  <button className="btn" onClick={() => { setSelectedBook(book); setShowTxModal(true); }}>Nhập/Xuất</button>
+                  <button className="btn btn-primary" onClick={() => { setSelectedBook(book); setShowTxModal(true); }}>Nhập/Xuất</button>
+                  <button className="btn" onClick={() => openHistory(book)}>Lịch sử</button>
                 </div>
               </div>
             ))}
@@ -132,6 +142,39 @@ function App() {
                 <button type="button" className="btn" onClick={() => setShowTxModal(false)}>Hủy</button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {showHistoryModal && (
+        <div className="modal-overlay">
+          <div className="modal-content" style={{ width: '600px' }}>
+            <h3>Thẻ Kho: {selectedBook.title}</h3>
+            <div style={{ maxHeight: '300px', overflowY: 'auto', marginBottom: '1rem' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: '1px solid #334155', textAlign: 'left' }}>
+                    <th style={{ padding: '10px' }}>Thời gian</th>
+                    <th style={{ padding: '10px' }}>Loại</th>
+                    <th style={{ padding: '10px' }}>Biến động</th>
+                    <th style={{ padding: '10px' }}>Tồn cuối</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {history.map((h, i) => (
+                    <tr key={i} style={{ borderBottom: '1px solid #1e293b' }}>
+                      <td style={{ padding: '10px', fontSize: '0.8rem' }}>{new Date(h.createdAt).toLocaleString()}</td>
+                      <td style={{ padding: '10px' }}>{h.Transaction?.type}</td>
+                      <td style={{ padding: '10px', color: h.change > 0 ? '#10b981' : '#ef4444' }}>
+                        {h.change > 0 ? `+${h.change}` : h.change}
+                      </td>
+                      <td style={{ padding: '10px' }}>{h.currentStock}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+            <button className="btn btn-primary" onClick={() => setShowHistoryModal(false)}>Đóng</button>
           </div>
         </div>
       )}
