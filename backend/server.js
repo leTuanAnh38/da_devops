@@ -28,6 +28,10 @@ app.get('/api/books', async (req, res) => {
 
 app.post('/api/books', async (req, res) => {
   try {
+    const { title } = req.body;
+    if (!title || title.trim() === '') {
+      return res.status(400).json({ error: 'Tên sách không được để trống' });
+    }
     const book = await Book.create(req.body);
     res.status(201).json(book);
   } catch (error) {
@@ -40,6 +44,12 @@ app.post('/api/transactions', async (req, res) => {
   const t = await sequelize.transaction();
   try {
     const { bookId, type, quantity } = req.body;
+
+    // Kiểm tra số lượng hợp lệ
+    if (!quantity || quantity <= 0) {
+      return res.status(400).json({ error: 'Số lượng phải lớn hơn 0' });
+    }
+
     const book = await Book.findByPk(bookId, { transaction: t });
 
     if (!book) {
