@@ -1,67 +1,69 @@
 import { DataTypes } from 'sequelize';
 import sequelize from './db.js';
 
+// 1. Model Danh mục
+export const Category = sequelize.define('Category', {
+  id: { type: DataTypes.STRING, primaryKey: true }, // VD: CAT001
+  name: { type: DataTypes.STRING, allowNull: false },
+  slug: { type: DataTypes.STRING },
+  description: { type: DataTypes.TEXT }
+});
+
+// 2. Model Sách
 export const Book = sequelize.define('Book', {
-  id: {
-    type: DataTypes.UUID,
-    defaultValue: DataTypes.UUIDV4,
-    primaryKey: true,
-  },
-  title: {
-    type: DataTypes.STRING,
-    allowNull: false,
-  },
-  author: {
-    type: DataTypes.STRING,
-  },
-  category: {
-    type: DataTypes.STRING,
-  },
-  location: {
-    type: DataTypes.STRING,
-  },
-  stock: {
-    type: DataTypes.INTEGER,
-    defaultValue: 0,
-  },
+  id: { type: DataTypes.STRING, primaryKey: true }, // VD: #001
+  title: { type: DataTypes.STRING, allowNull: false },
+  price: { type: DataTypes.INTEGER, defaultValue: 0 },
+  quantity: { type: DataTypes.INTEGER, defaultValue: 0 },
+  unit: { type: DataTypes.STRING, defaultValue: 'Cuốn' },
+  status: { 
+    type: DataTypes.VIRTUAL,
+    get() {
+      return this.quantity > 5 ? 'Còn hàng' : 'Sắp hết';
+    }
+  }
 });
 
-export const Transaction = sequelize.define('Transaction', {
-  type: {
-    type: DataTypes.ENUM('IMPORT', 'EXPORT'),
-    allowNull: false,
+// 3. Model Đơn hàng
+export const Order = sequelize.define('Order', {
+  id: { type: DataTypes.STRING, primaryKey: true }, // VD: DH001
+  customer: { type: DataTypes.STRING, allowNull: false },
+  phone: { type: DataTypes.STRING },
+  address: { type: DataTypes.STRING },
+  totalAmount: { type: DataTypes.INTEGER, defaultValue: 0 },
+  status: { 
+    type: DataTypes.STRING, 
+    defaultValue: 'Chờ xác nhận' 
   },
-  quantity: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-  },
-  date: {
-    type: DataTypes.DATE,
-    defaultValue: DataTypes.NOW,
-  },
+  note: { type: DataTypes.TEXT }
 });
 
+// 4. Model Chi tiết đơn hàng
+export const OrderItem = sequelize.define('OrderItem', {
+  qty: { type: DataTypes.INTEGER, allowNull: false },
+  price: { type: DataTypes.INTEGER, allowNull: false },
+  total: { type: DataTypes.INTEGER, allowNull: false }
+});
+
+// 5. Model Thẻ kho
 export const StockCard = sequelize.define('StockCard', {
-  previousStock: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-  },
-  change: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-  },
-  currentStock: {
-    type: DataTypes.INTEGER,
-    allowNull: false,
-  },
+  type: { type: DataTypes.STRING, allowNull: false }, // NHAP, XUAT, DIEU_CHINH, BAN_HANG
+  change: { type: DataTypes.INTEGER, allowNull: false },
+  currentStock: { type: DataTypes.INTEGER, allowNull: false },
+  note: { type: DataTypes.STRING }
 });
 
-// Relationships
-Book.hasMany(Transaction);
-Transaction.belongsTo(Book);
+// THIẾT LẬP QUAN HỆ (ASSOCIATIONS)
+Category.hasMany(Book, { foreignKey: 'categoryId' });
+Book.belongsTo(Category, { foreignKey: 'categoryId' });
 
-Book.hasMany(StockCard);
-StockCard.belongsTo(Book);
+Order.hasMany(OrderItem, { foreignKey: 'orderId' });
+OrderItem.belongsTo(Order, { foreignKey: 'orderId' });
 
-Transaction.hasOne(StockCard);
-StockCard.belongsTo(Transaction);
+Book.hasMany(OrderItem, { foreignKey: 'bookId' });
+OrderItem.belongsTo(Book, { foreignKey: 'bookId' });
+
+Book.hasMany(StockCard, { foreignKey: 'bookId' });
+StockCard.belongsTo(Book, { foreignKey: 'bookId' });
+
+export default { Category, Book, Order, OrderItem, StockCard };

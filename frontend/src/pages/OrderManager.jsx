@@ -6,17 +6,27 @@ import {
 } from 'react-icons/fi';
 import './OrderManager.css';
 
-const OrderManager = ({ setCurrentMenu }) => {
-    // 1. DỮ LIỆU MẪU (Mock data)
-    const [orders, setOrders] = useState([
-        { id: 'DH001', customer: 'Nhà sách Fahasa Quận 1', date: '10/4/2026', itemsCount: 5, totalAmount: 12500000, status: 'Chờ xác nhận' },
-        { id: 'DH002', customer: 'Thư viện Tổng hợp TP.HCM', date: '11/4/2026', itemsCount: 12, totalAmount: 8750000, status: 'Đã xác nhận' },
-        { id: 'DH003', customer: 'Nhà sách Phương Nam', date: '12/4/2026', itemsCount: 3, totalAmount: 4200000, status: 'Hoàn thành' },
-        { id: 'DH004', customer: 'Trường THPT Lê Quý Đôn', date: '13/4/2026', itemsCount: 20, totalAmount: 2100000, status: 'Đã xác nhận' },
-        { id: 'DH005', customer: 'Công ty sách Nhã Nam', date: '9/4/2026', itemsCount: 8, totalAmount: 18500000, status: 'Hoàn thành' },
-        { id: 'DH006', customer: 'Nhà sách Cá Chép', date: '14/4/2026', itemsCount: 4, totalAmount: 3200000, status: 'Chờ xác nhận' },
-    ]);
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
+const OrderManager = ({ setCurrentMenu }) => {
+    const [orders, setOrders] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    useEffect(() => {
+        fetchOrders();
+    }, []);
+
+    const fetchOrders = async () => {
+        try {
+            const res = await axios.get(`${API_URL}/orders`);
+            setOrders(res.data);
+            setLoading(false);
+        } catch (err) {
+            console.error("Lỗi khi tải đơn hàng:", err);
+            setLoading(false);
+        }
+    };
+    
     // 2. STATES QUẢN LÝ UI
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
@@ -37,11 +47,8 @@ const OrderManager = ({ setCurrentMenu }) => {
         const matchesSearch = order.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
                              order.customer.toLowerCase().includes(searchTerm.toLowerCase());
         const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-        const matchesDate = !filters.date || order.date === filters.date;
-        const matchesMinTotal = !filters.minTotal || order.totalAmount >= parseInt(filters.minTotal);
-        const matchesMaxTotal = !filters.maxTotal || order.totalAmount <= parseInt(filters.maxTotal);
-
-        return matchesSearch && matchesStatus && matchesDate && matchesMinTotal && matchesMaxTotal;
+        // Logic lọc nâng cao (tùy chỉnh thêm nếu cần)
+        return matchesSearch && matchesStatus;
     });
 
     const clearFilters = () => {
@@ -55,10 +62,7 @@ const OrderManager = ({ setCurrentMenu }) => {
     };
 
     const handleRefresh = () => {
-        setSearchTerm('');
-        setStatusFilter('all');
-        setFilters({ date: '', minTotal: '', maxTotal: '' });
-        setIsFilterOpen(false);
+        fetchOrders();
         showToast('Đã làm mới danh sách đơn hàng');
     };
 
@@ -67,29 +71,26 @@ const OrderManager = ({ setCurrentMenu }) => {
         setActiveMenuId(null);
     };
 
-    const handleConfirmAction = () => {
+    const handleConfirmAction = async () => {
         const { type, target } = confirmModal;
-        if (type === 'delete') {
-            setOrders(orders.filter(o => o.id !== target.id));
-            showToast(`Đã xóa đơn hàng ${target.id}`);
-        } else if (type === 'approve') {
-            setOrders(orders.map(o => o.id === target.id ? { ...o, status: 'Đã xác nhận' } : o));
-            showToast(`Đã xác nhận đơn hàng ${target.id}`);
+        try {
+            if (type === 'delete') {
+                await axios.delete(`${API_URL}/orders/${target.id}`);
+                setOrders(orders.filter(o => o.id !== target.id));
+                showToast(`Đã xóa đơn hàng ${target.id}`);
+            } else if (type === 'approve') {
+                await axios.put(`${API_URL}/orders/${target.id}`, { status: 'Đã xác nhận' });
+                fetchOrders();
+                showToast(`Đã xác nhận đơn hàng ${target.id}`);
+            }
+        } catch (err) {
+            showToast("Lỗi khi thực hiện thao tác");
         }
         setConfirmModal({ isOpen: false, type: '', target: null });
     };
 
     const handleViewDetail = (order) => {
-        setSelectedOrder({
-            ...order,
-            products: [
-                { name: 'Đắc Nhân Tâm', qty: 2, price: 100000, total: 200000 },
-                { name: 'Clean Code', qty: 1, price: 250000, total: 250000 },
-            ],
-            address: '123 Lê Lợi, Quận 1, TP.HCM',
-            phone: '0901234567',
-            note: 'Giao trong giờ hành chính'
-        });
+        setSelectedOrder(order);
         setIsViewModalOpen(true);
         setActiveMenuId(null);
     };
@@ -100,11 +101,32 @@ const OrderManager = ({ setCurrentMenu }) => {
         setActiveMenuId(null);
     };
 
-    const handleSubmit = (e, type) => {
+    const handleSubmit = async (e, type) => {
         e.preventDefault();
-        showToast(type === 'add' ? "Tạo đơn hàng thành công!" : "Cập nhật đơn hàng thành công!");
-        setIsAddModalOpen(false);
-        setIsEditModalOpen(false);
+        const form = e.target;
+        const formData = {
+            id: `DH${Math.floor(Math.random() * 900) + 100}`,
+            customer: form.elements[0].value,
+            phone: form.elements[1].value,
+            address: form.elements[2].value,
+            note: form.elements[3].value,
+            items: [] // Ở bản demo đơn giản, ta để trống items hoặc bổ sung logic chọn sách
+        };
+
+        try {
+            if (type === 'add') {
+                await axios.post(`${API_URL}/orders`, formData);
+                showToast("Tạo đơn hàng thành công!");
+            } else {
+                await axios.put(`${API_URL}/orders/${selectedOrder.id}`, formData);
+                showToast("Cập nhật thành công!");
+            }
+            fetchOrders();
+            setIsAddModalOpen(false);
+            setIsEditModalOpen(false);
+        } catch (err) {
+            showToast("Lỗi: " + (err.response?.data?.error || err.message));
+        }
     };
 
     const formatPrice = (price) => {

@@ -5,27 +5,40 @@ import {
 } from 'react-icons/fi';
 import './CategoryManager.css';
 
+import axios from 'axios';
+
+const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
 const CategoryManager = ({ setCurrentMenu }) => {
-    // 1. DỮ LIỆU MẪU (Mock data)
-    const [categories, setCategories] = useState([
-        { id: 'CAT001', name: 'Công nghệ thông tin', slug: 'cntt', description: 'Sách về lập trình, mạng, AI...', count: 45 },
-        { id: 'CAT002', name: 'Kinh doanh & Đầu tư', slug: 'kinh-doanh', description: 'Quản trị, tài chính, khởi nghiệp', count: 28 },
-        { id: 'CAT003', name: 'Văn học - Nghệ thuật', slug: 'van-hoc', description: 'Tiểu thuyết, thơ, hội họa', count: 52 },
-        { id: 'CAT004', name: 'Kỹ năng sống', slug: 'ky-nang', description: 'Phát triển bản thân, giao tiếp', count: 19 },
-        { id: 'CAT005', name: 'Lịch sử - Địa lý', slug: 'lich-su', description: 'Kiến thức lịch sử Việt Nam và thế giới', count: 15 },
-    ]);
+    const [categories, setCategories] = useState([]);
+    const [loading, setLoading] = useState(true);
+
+    // Fetch categories from API
+    useEffect(() => {
+        fetchCategories();
+    }, []);
+
+    const fetchCategories = async () => {
+        try {
+            const res = await axios.get(`${API_URL}/categories`);
+            setCategories(res.data);
+            setLoading(false);
+        } catch (err) {
+            console.error("Lỗi khi tải danh mục:", err);
+            setLoading(false);
+        }
+    };
 
     // Confirmation Modal State
     const [confirmModal, setConfirmModal] = useState({ isOpen: false, target: null });
 
     const [searchTerm, setSearchTerm] = useState('');
     const [isModalOpen, setIsModalOpen] = useState(false);
-    const [modalMode, setModalMode] = useState('add'); // 'add' hoặc 'edit'
+    const [modalMode, setModalMode] = useState('add'); 
     const [currentCategory, setCurrentCategory] = useState(null);
     const [activeMenuId, setActiveMenuId] = useState(null);
     const [toast, setToast] = useState({ show: false, msg: '' });
 
-    // 3. XỬ LÝ LOGIC
     const filteredCategories = categories.filter(cat =>
         cat.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
         cat.id.toLowerCase().includes(searchTerm.toLowerCase())
@@ -48,19 +61,49 @@ const CategoryManager = ({ setCurrentMenu }) => {
         setActiveMenuId(null);
     };
 
-    const handleConfirmDelete = () => {
+    const handleConfirmDelete = async () => {
         const target = confirmModal.target;
-        setCategories(categories.filter(cat => cat.id !== target.id));
-        showToast("Đã xóa danh mục!");
+        if (!target) return;
+        
+        try {
+            await axios.delete(`${API_URL}/categories/${target.id}`);
+            setCategories(categories.filter(cat => cat.id !== target.id));
+            showToast("Đã xóa danh mục thành công!");
+        } catch (err) {
+            console.error(err);
+            showToast("Lỗi: Không thể xóa danh mục này (có thể có sách thuộc danh mục này)");
+        }
         setConfirmModal({ isOpen: false, target: null });
     };
 
-    const handleSubmit = (e) => {
+    const handleSubmit = async (e) => {
         e.preventDefault();
-        // Logic giả lập xử lý API
-        const msg = modalMode === 'add' ? "Thêm danh mục thành công!" : "Cập nhật thành công!";
-        showToast(msg);
-        setIsModalOpen(false);
+        const form = e.target;
+        
+        const formData = {
+            name: form.elements[0].value,
+            slug: form.elements[1].value,
+            description: form.elements[2].value
+        };
+
+        try {
+            if (modalMode === 'add') {
+                // Tự tạo ID nếu thêm mới
+                formData.id = `CAT${Math.floor(Math.random() * 900) + 100}`;
+                const res = await axios.post(`${API_URL}/categories`, formData);
+                setCategories([...categories, res.data]);
+                showToast("Thêm danh mục thành công!");
+            } else {
+                // Giữ nguyên ID khi sửa
+                const res = await axios.put(`${API_URL}/categories/${currentCategory.id}`, formData);
+                setCategories(categories.map(cat => cat.id === currentCategory.id ? res.data : cat));
+                showToast("Cập nhật thành công!");
+            }
+            setIsModalOpen(false);
+        } catch (err) {
+            console.error(err);
+            showToast("Lỗi khi lưu thông tin danh mục");
+        }
     };
 
     return (
@@ -124,7 +167,7 @@ const CategoryManager = ({ setCurrentMenu }) => {
                                 <td><span className="badge-slug">/{cat.slug}</span></td>
                                 <td className="txt-desc">{cat.description}</td>
                                 <td className="txt-center">
-                                    <span className="count-badge">{cat.count}</span>
+                                    <span className="count-badge">{cat.Books ? cat.Books.length : 0}</span>
                                 </td>
                                 <td className="action-cell">
                                     <button className="btn-more" onClick={() => setActiveMenuId(activeMenuId === cat.id ? null : cat.id)}>

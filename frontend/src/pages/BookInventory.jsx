@@ -16,12 +16,16 @@ const BookInventory = ({ setCurrentMenu }) => {
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
+    const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
+    const [adjustType, setAdjustType] = useState('NHAP'); // 'NHAP' hoặc 'XUAT'
     
     // State cho Menu 3 chấm
     const [currentBook, setCurrentBook] = useState(null);
+    const [bookHistory, setBookHistory] = useState([]);
     const [activeMenuId, setActiveMenuId] = useState(null);
     const [formError, setFormError] = useState('');
     const [toast, setToast] = useState({ show: false, message: '', type: 'success' });
+    const [categoriesList, setCategoriesList] = useState([]);
 
     // States cho Tìm kiếm, Bộ lọc & Phân trang
     const [searchQuery, setSearchQuery] = useState('');
@@ -31,18 +35,32 @@ const BookInventory = ({ setCurrentMenu }) => {
     const [currentPage, setCurrentPage] = useState(1);
     const itemsPerPage = 5;
 
+    const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
     useEffect(() => {
-        setBooks([
-            { id: '#001', title: 'Lập trình Python cơ bản', category: 'CNTT', price: 150000, quantity: 50, unit: 'Cuốn', status: 'Còn hàng' },
-            { id: '#002', title: 'Kỹ năng giao tiếp đỉnh cao', category: 'Kỹ năng', price: 120000, quantity: 120, unit: 'Cuốn', status: 'Còn hàng' },
-            { id: '#003', title: 'Đắc Nhân Tâm', category: 'Văn học', price: 100000, quantity: 15, unit: 'Cuốn', status: 'Sắp hết' },
-            { id: '#004', title: 'Kinh tế học vĩ mô', category: 'Kinh doanh', price: 200000, quantity: 30, unit: 'Cuốn', status: 'Còn hàng' },
-            { id: '#005', title: 'Lịch sử Việt Nam tóm tắt', category: 'Lịch sử', price: 180000, quantity: 80, unit: 'Cuốn', status: 'Còn hàng' },
-            { id: '#006', title: 'Clean Code', category: 'CNTT', price: 250000, quantity: 40, unit: 'Cuốn', status: 'Còn hàng' },
-            { id: '#007', title: 'Nhà Lãnh Đạo Không Chức Danh', category: 'Kinh doanh', price: 110000, quantity: 0, unit: 'Cuốn', status: 'Sắp hết' },
-        ]);
-        setLoading(false);
+        fetchBooks();
+        fetchCategories();
     }, []);
+
+    const fetchCategories = async () => {
+        try {
+            const res = await axios.get(`${API_URL}/categories`);
+            setCategoriesList(res.data);
+        } catch (err) {
+            console.error("Lỗi khi tải danh mục:", err);
+        }
+    };
+
+    const fetchBooks = async () => {
+        try {
+            const res = await axios.get(`${API_URL}/books`);
+            setBooks(res.data);
+            setLoading(false);
+        } catch (err) {
+            console.error("Lỗi khi tải sách:", err);
+            setLoading(false);
+        }
+    };
 
     // {
     // "id": "#001",            // Hoặc _id của MongoDB
@@ -60,9 +78,9 @@ const BookInventory = ({ setCurrentMenu }) => {
             const matchesSearch = 
                 book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
                 book.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                book.category.toLowerCase().includes(searchQuery.toLowerCase());
+                (book.Category?.name || "").toLowerCase().includes(searchQuery.toLowerCase());
             
-            const matchesCategory = filters.category === '' || book.category === filters.category;
+            const matchesCategory = filters.category === '' || book.categoryId === filters.category;
             const matchesStatus = filters.status === '' || book.status === filters.status;
             const matchesMinPrice = filters.minPrice === '' || book.price >= parseInt(filters.minPrice);
             const matchesMaxPrice = filters.maxPrice === '' || book.price <= parseInt(filters.maxPrice);
@@ -113,61 +131,114 @@ const BookInventory = ({ setCurrentMenu }) => {
     };
 
     // --- CÁC HÀM XỬ LÝ MODAL BỊ THIẾU ĐÃ ĐƯỢC THÊM LẠI VÀO ĐÂY ---
-    const handleAddSubmit = (e) => {
+    const handleAddSubmit = async (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
-        const newBook = {
-            id: `#${Math.floor(Math.random() * 900) + 100}`,
+        const newBookData = {
+            id: formData.get('id') || `#${Math.floor(Math.random() * 900) + 100}`,
             title: formData.get('title'),
-            category: formData.get('category'),
+            categoryId: formData.get('categoryId'), // Đổi từ category sang categoryId
             price: parseInt(formData.get('price')),
             quantity: parseInt(formData.get('quantity')),
-            unit: formData.get('unit'),
-            status: parseInt(formData.get('quantity')) > 20 ? 'Còn hàng' : 'Sắp hết'
+            unit: formData.get('unit')
         };
 
-        if (!newBook.title || !newBook.category || isNaN(newBook.price) || isNaN(newBook.quantity)) {
-            setFormError('Vui lòng điền đầy đủ và đúng định dạng thông tin');
-            return;
+        try {
+            await axios.post(`${API_URL}/books`, newBookData);
+            fetchBooks();
+            setIsAddModalOpen(false);
+            setFormError('');
+            showToast('Thêm sách thành công!', 'success');
+        } catch (err) {
+            setFormError('Lỗi khi thêm sách: ' + (err.response?.data?.error || err.message));
         }
-
-        setBooks([...books, newBook]);
-        setIsAddModalOpen(false);
-        setFormError('');
-        showToast('Thêm sách thành công!', 'success');
     };
 
-    const openViewModal = (book) => { setCurrentBook(book); setIsViewModalOpen(true); closeMenu(); };
+    const openViewModal = async (book) => { 
+        setCurrentBook(book); 
+        setIsViewModalOpen(true); 
+        closeMenu(); 
+        
+        try {
+            const encodedId = encodeURIComponent(book.id);
+            const res = await axios.get(`${API_URL}/books/${encodedId}/history`);
+            setBookHistory(res.data);
+        } catch (err) {
+            console.error("Lỗi khi tải lịch sử kho:", err);
+            setBookHistory([]);
+        }
+    };
     
     const openEditModal = (book) => { setCurrentBook(book); setIsEditModalOpen(true); closeMenu(); };
     
-    const handleEditSubmit = (e) => {
+    const handleEditSubmit = async (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
         const updatedBookData = {
-            title: e.target.elements[0].value,
-            category: e.target.elements[1].value,
-            price: parseInt(e.target.elements[2].value),
-            quantity: parseInt(e.target.elements[3].value),
-            unit: currentBook.unit // simplified for this example
+            title: formData.get('title'),
+            categoryId: formData.get('categoryId'),
+            price: parseInt(formData.get('price')),
+            quantity: parseInt(formData.get('quantity')),
+            unit: formData.get('unit')
         };
 
-        setBooks(books.map(book => 
-            book.id === currentBook.id ? { ...book, ...updatedBookData, status: updatedBookData.quantity > 20 ? 'Còn hàng' : 'Sắp hết' } : book
-        ));
+        if (!currentBook?.id) {
+            showToast('Lỗi: Không tìm thấy ID sách', 'error');
+            return;
+        }
 
-        setIsEditModalOpen(false);
-        showToast('Chỉnh sửa sách thành công!', 'success');
+        try {
+            const encodedId = encodeURIComponent(currentBook.id);
+            await axios.put(`${API_URL}/books/${encodedId}`, updatedBookData);
+            fetchBooks();
+            setIsEditModalOpen(false);
+            showToast('Chỉnh sửa sách thành công!', 'success');
+        } catch (err) {
+            console.error(err);
+            showToast('Lỗi khi chỉnh sửa sách', 'error');
+        }
     };
 
     const openDeleteModal = (book) => { setCurrentBook(book); setIsDeleteModalOpen(true); closeMenu(); };
     
-    const handleConfirmDelete = () => {
-        const target = currentBook;
-        setBooks(books.filter(book => book.id !== target.id));
-        setIsDeleteModalOpen(false);
-        showToast('Xóa sách thành công!', 'success');
-        setCurrentBook(null);
+    const handleConfirmDelete = async () => {
+        try {
+            const encodedId = encodeURIComponent(currentBook.id);
+            await axios.delete(`${API_URL}/books/${encodedId}`);
+            fetchBooks();
+            setIsDeleteModalOpen(false);
+            showToast('Xóa sách thành công!', 'success');
+            setCurrentBook(null);
+        } catch (err) {
+            showToast('Lỗi khi xóa sách', 'error');
+        }
+    };
+
+    const openAdjustModal = (book, type) => {
+        setCurrentBook(book);
+        setAdjustType(type);
+        setIsAdjustModalOpen(true);
+        setActiveMenuId(null);
+    };
+
+    const handleAdjustSubmit = async (e) => {
+        e.preventDefault();
+        const formData = new FormData(e.target);
+        const adjustment = {
+            bookId: currentBook.id,
+            type: adjustType,
+            quantity: parseInt(formData.get('quantity')),
+            note: formData.get('note')
+        };
+
+        try {
+            await axios.post(`${API_URL}/inventory/adjust`, adjustment);
+            fetchBooks();
+            setIsAdjustModalOpen(false);
+            showToast(`${adjustType === 'NHAP' ? 'Nhập' : 'Xuất'} kho thành công!`, 'success');
+        } catch (err) {
+            showToast('Lỗi: ' + (err.response?.data?.error || err.message), 'error');
+        }
     };
 
     return (
@@ -226,11 +297,9 @@ const BookInventory = ({ setCurrentMenu }) => {
                             <label>Thể loại</label>
                             <select value={filters.category} onChange={(e) => setFilters({...filters, category: e.target.value})}>
                                 <option value="">Tất cả thể loại</option>
-                                <option value="CNTT">CNTT</option>
-                                <option value="Kinh doanh">Kinh doanh</option>
-                                <option value="Văn học">Văn học</option>
-                                <option value="Kỹ năng">Kỹ năng</option>
-                                <option value="Lịch sử">Lịch sử</option>
+                                {categoriesList.map(cat => (
+                                    <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                ))}
                             </select>
                         </div>
                         <div className="filter-group">
@@ -288,7 +357,7 @@ const BookInventory = ({ setCurrentMenu }) => {
                                     <tr key={book.id} className={activeMenuId === book.id ? 'active-row' : ''}>
                                         <td>{book.id}</td>
                                         <td className="book-title">{book.title}</td>
-                                        <td>{book.category}</td>
+                                        <td>{book.Category?.name || book.categoryId}</td>
                                         <td>{formatPrice(book.price)}</td>
                                         <td>{book.quantity}</td>
                                         <td>{book.unit}</td>
@@ -318,6 +387,14 @@ const BookInventory = ({ setCurrentMenu }) => {
                                                     </button>
                                                     <button className="dropdown-item text-danger" onClick={() => openDeleteModal(book)}>
                                                         <FiTrash2 /> Xóa <span className="shortcut">Del</span>
+                                                    </button>
+                                                    <div className="dropdown-divider"></div>
+                                                    <div className="dropdown-group-title">Kho hàng</div>
+                                                    <button className="dropdown-item" onClick={() => openAdjustModal(book, 'NHAP')}>
+                                                        <FiPlus style={{ color: '#10B981' }} /> Nhập kho nhanh
+                                                    </button>
+                                                    <button className="dropdown-item" onClick={() => openAdjustModal(book, 'XUAT')}>
+                                                        <FiTrash2 style={{ color: '#EF4444' }} /> Xuất kho nhanh
                                                     </button>
                                                     <div className="dropdown-divider"></div>
                                                     <button className="dropdown-item" onClick={closeMenu}><FiX /> Đóng menu <span className="shortcut">Esc</span></button>
@@ -377,33 +454,45 @@ const BookInventory = ({ setCurrentMenu }) => {
                                     </div>
                                     <div className="detail-item">
                                         <span className="detail-label">Thể loại</span>
-                                        <span className="detail-value">{currentBook.category}</span>
+                                        <span className="detail-value">{currentBook.Category?.name || currentBook.categoryId}</span>
                                     </div>
                                 </div>
                             </div>
                             <div className="detail-section">
-                                <h3>Thông tin quản lý</h3>
-                                <div className="detail-grid">
-                                    <div className="detail-item">
-                                        <span className="detail-label">Giá</span>
-                                        <span className="detail-value">{formatPrice(currentBook.price)}</span>
-                                    </div>
-                                    <div className="detail-item">
-                                        <span className="detail-label">Số lượng kho</span>
-                                        <span className="detail-value">{currentBook.quantity}</span>
-                                    </div>
-                                    <div className="detail-item">
-                                        <span className="detail-label">Đơn vị</span>
-                                        <span className="detail-value">{currentBook.unit}</span>
-                                    </div>
-                                    <div className="detail-item">
-                                        <span className="detail-label">Trạng thái</span>
-                                        <span className="detail-value">
-                                            <span className={currentBook.status === 'Sắp hết' ? 'badge badge-danger' : 'badge badge-success'}>
-                                                {currentBook.status}
-                                            </span>
-                                        </span>
-                                    </div>
+                                <h3 style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                    <FiLayers /> Lịch sử biến động kho
+                                </h3>
+                                <div className="history-table-wrapper" style={{ marginTop: '12px', maxHeight: '200px', overflowY: 'auto', border: '1px solid #E5E7EB', borderRadius: '8px' }}>
+                                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '14px' }}>
+                                        <thead style={{ backgroundColor: '#F9FAFB', position: 'sticky', top: 0 }}>
+                                            <tr>
+                                                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Thời gian</th>
+                                                <th style={{ padding: '10px', textAlign: 'left', borderBottom: '1px solid #E5E7EB' }}>Loại</th>
+                                                <th style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #E5E7EB' }}>Thay đổi</th>
+                                                <th style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #E5E7EB' }}>Tồn cuối</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {bookHistory.length > 0 ? bookHistory.map((h, i) => (
+                                                <tr key={i}>
+                                                    <td style={{ padding: '10px', borderBottom: '1px solid #F3F4F6' }}>{new Date(h.createdAt).toLocaleString('vi-VN')}</td>
+                                                    <td style={{ padding: '10px', borderBottom: '1px solid #F3F4F6' }}>
+                                                        <span className={`badge ${h.type === 'NHAP' ? 'badge-success' : 'badge-danger'}`} style={{ fontSize: '11px' }}>
+                                                            {h.type === 'NHAP' ? 'Nhập' : 'Xuất'}
+                                                        </span>
+                                                    </td>
+                                                    <td style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #F3F4F6', color: h.change > 0 ? '#10B981' : '#EF4444', fontWeight: 'bold' }}>
+                                                        {h.change > 0 ? `+${h.change}` : h.change}
+                                                    </td>
+                                                    <td style={{ padding: '10px', textAlign: 'right', borderBottom: '1px solid #F3F4F6' }}>{h.currentStock}</td>
+                                                </tr>
+                                            )) : (
+                                                <tr>
+                                                    <td colSpan="4" style={{ padding: '20px', textAlign: 'center', color: '#6B7280' }}>Chưa có lịch sử biến động.</td>
+                                                </tr>
+                                            )}
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
                         </div>
@@ -425,17 +514,20 @@ const BookInventory = ({ setCurrentMenu }) => {
                         <form className="modal-body" onSubmit={handleAddSubmit}>
                             {formError && <div className="error-alert">{formError}</div>}
                             <div className="form-group">
+                                <label>Mã sách (Ví dụ: #001)</label>
+                                <input type="text" name="id" placeholder="Để trống để tự tạo mã" />
+                            </div>
+                            <div className="form-group">
                                 <label>Tên sách</label>
-                                <input type="text" name="title" placeholder="Nhập tên sách" />
+                                <input type="text" name="title" placeholder="Nhập tên sách" required />
                             </div>
                             <div className="form-group">
                                 <label>Thể loại</label>
-                                <select name="category">
+                                <select name="categoryId" required>
                                     <option value="">Chọn thể loại</option>
-                                    <option value="CNTT">CNTT</option>
-                                    <option value="Kinh doanh">Kinh doanh</option>
-                                    <option value="Văn học">Văn học</option>
-                                    <option value="Kỹ năng">Kỹ năng</option>
+                                    {categoriesList.map(cat => (
+                                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                    ))}
                                 </select>
                             </div>
                             <div className="form-row">
@@ -450,7 +542,7 @@ const BookInventory = ({ setCurrentMenu }) => {
                             </div>
                             <div className="form-group">
                                 <label>Đơn vị</label>
-                                <select name="unit">
+                                <select name="unit" defaultValue="Cuốn">
                                     <option value="Cuốn">Cuốn</option>
                                     <option value="Bộ">Bộ</option>
                                 </select>
@@ -475,26 +567,33 @@ const BookInventory = ({ setCurrentMenu }) => {
                         <form className="modal-body" onSubmit={handleEditSubmit}>
                             <div className="form-group">
                                 <label>Tên sách</label>
-                                <input type="text" defaultValue={currentBook.title} />
+                                <input type="text" name="title" defaultValue={currentBook.title} required />
                             </div>
                             <div className="form-group">
                                 <label>Thể loại</label>
-                                <select defaultValue={currentBook.category}>
-                                    <option value="CNTT">CNTT</option>
-                                    <option value="Kinh doanh">Kinh doanh</option>
-                                    <option value="Văn học">Văn học</option>
-                                    <option value="Kỹ năng">Kỹ năng</option>
+                                <select defaultValue={currentBook.categoryId} name="categoryId" required>
+                                    <option value="">Chọn thể loại</option>
+                                    {categoriesList.map(cat => (
+                                        <option key={cat.id} value={cat.id}>{cat.name}</option>
+                                    ))}
                                 </select>
                             </div>
                             <div className="form-row">
                                 <div className="form-group">
                                     <label>Giá (VNĐ)</label>
-                                    <input type="number" defaultValue={currentBook.price} />
+                                    <input type="number" name="price" defaultValue={currentBook.price} required />
                                 </div>
                                 <div className="form-group">
                                     <label>Số lượng</label>
-                                    <input type="number" defaultValue={currentBook.quantity} />
+                                    <input type="number" name="quantity" defaultValue={currentBook.quantity} required />
                                 </div>
+                            </div>
+                            <div className="form-group">
+                                <label>Đơn vị</label>
+                                <select name="unit" defaultValue={currentBook.unit}>
+                                    <option value="Cuốn">Cuốn</option>
+                                    <option value="Bộ">Bộ</option>
+                                </select>
                             </div>
                             <div className="modal-footer">
                                 <button type="button" className="btn-cancel" onClick={() => setIsEditModalOpen(false)}>Hủy</button>
@@ -524,6 +623,37 @@ const BookInventory = ({ setCurrentMenu }) => {
                             <button className="btn-outline-simple-cat" onClick={() => setIsDeleteModalOpen(false)}>Hủy</button>
                             <button className="btn-danger-confirm-cat" onClick={handleConfirmDelete}>Xác nhận xóa</button>
                         </div>
+                    </div>
+                </div>
+            )}
+            {/* MODAL ĐIỀU CHỈNH KHO (NHẬP/XUẤT) */}
+            {isAdjustModalOpen && currentBook && (
+                <div className="modal-overlay">
+                    <div className="modal-content" style={{ maxWidth: '400px' }}>
+                        <div className="modal-header">
+                            <h2>{adjustType === 'NHAP' ? 'Nhập kho sách' : 'Xuất kho sách'}</h2>
+                            <button type="button" className="btn-close" onClick={() => setIsAdjustModalOpen(false)}><FiX /></button>
+                        </div>
+                        <form className="modal-body" onSubmit={handleAdjustSubmit}>
+                            <div style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#F3F4F6', borderRadius: '6px' }}>
+                                <p style={{ margin: 0, fontSize: '13px', color: '#6B7280' }}>Sách: <strong>{currentBook.title}</strong></p>
+                                <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#6B7280' }}>Tồn hiện tại: <strong>{currentBook.quantity}</strong></p>
+                            </div>
+                            <div className="form-group">
+                                <label>Số lượng {adjustType === 'NHAP' ? 'nhập thêm' : 'xuất đi'}</label>
+                                <input type="number" name="quantity" min="1" placeholder="Nhập số lượng..." required />
+                            </div>
+                            <div className="form-group">
+                                <label>Ghi chú / Lý do</label>
+                                <textarea name="note" placeholder="Ví dụ: Nhập hàng mới về, Hàng lỗi..." rows="2"></textarea>
+                            </div>
+                            <div className="modal-footer">
+                                <button type="button" className="btn-cancel" onClick={() => setIsAdjustModalOpen(false)}>Hủy</button>
+                                <button type="submit" className="btn-submit" style={{ backgroundColor: adjustType === 'NHAP' ? '#10B981' : '#EF4444', color: 'white' }}>
+                                    Xác nhận {adjustType === 'NHAP' ? 'nhập' : 'xuất'}
+                                </button>
+                            </div>
+                        </form>
                     </div>
                 </div>
             )}
