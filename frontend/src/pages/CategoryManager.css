@@ -1,0 +1,388 @@
+.category-container {
+    padding: 24px 32px;
+    background-color: #ffffff;
+    min-height: 100vh;
+    font-family: 'Inter', sans-serif;
+}
+
+.category-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 24px;
+}
+
+.header-info h1 {
+    font-size: 24px;
+    color: #111827;
+    margin: 0 0 4px 0;
+}
+
+.header-info p {
+    color: #6B7280;
+    font-size: 14px;
+    margin: 0;
+}
+
+.btn-add-cat {
+    background-color: #2563EB;
+    color: white;
+    border: none;
+    padding: 10px 18px;
+    border-radius: 8px;
+    font-weight: 500;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: 0.2s;
+}
+
+.btn-add-cat:hover {
+    background-color: #1D4ED8;
+}
+
+/* TOOLBAR */
+.category-toolbar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+    background: #F9FAFB;
+    padding: 12px 16px;
+    border-radius: 12px;
+}
+
+.search-wrapper {
+    position: relative;
+    width: 300px;
+}
+
+.search-wrapper svg {
+    position: absolute;
+    left: 12px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: #9CA3AF;
+}
+
+.search-wrapper input {
+    width: 100%;
+    padding: 8px 12px 8px 36px;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    outline: none;
+}
+
+/* TABLE */
+.category-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+.category-table th {
+    text-align: left;
+    padding: 12px 16px;
+    background: #F3F4F6;
+    color: #4B5563;
+    font-weight: 600;
+    font-size: 14px;
+}
+
+.category-table td {
+    padding: 16px;
+    border-bottom: 1px solid #F3F4F6;
+    font-size: 14px;
+    color: #374151;
+}
+
+.txt-bold {
+    font-weight: 600;
+    color: #111827;
+}
+
+.txt-desc {
+    color: #6B7280;
+    max-width: 300px;
+}
+
+.txt-center {
+    text-align: center;
+}
+
+.cat-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.icon-folder {
+    color: #3B82F6;
+    font-size: 18px;
+}
+
+.badge-slug {
+    background: #EFF6FF;
+    color: #1D4ED8;
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-family: monospace;
+}
+
+.count-badge {
+    background: #F3F4F6;
+    padding: 4px 12px;
+    border-radius: 99px;
+    font-weight: 600;
+}
+
+/* DROPDOWN ACTIONS */
+.action-cell {
+    position: relative;
+}
+
+.btn-more {
+    background: none;
+    border: none;
+    cursor: pointer;
+    color: #9CA3AF;
+    padding: 5px;
+    border-radius: 4px;
+}
+
+.btn-more:hover {
+    background: #F3F4F6;
+    color: #374151;
+}
+
+.cat-dropdown {
+    position: absolute;
+    right: 0;
+    top: 100%;
+    background: white;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+    z-index: 10;
+    min-width: 120px;
+    overflow: hidden;
+}
+
+.cat-dropdown button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: 100%;
+    padding: 10px 16px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    text-align: left;
+    font-size: 13px;
+}
+
+.cat-dropdown button:hover {
+    background: #F9FAFB;
+}
+
+.txt-red {
+    color: #EF4444 !important;
+}
+
+/* MODAL & TOAST (Tương tự các trang trước để đồng nhất) */
+.modal-overlay {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.4);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+}
+
+.modal-box {
+    background: white;
+    width: 100%;
+    max-width: 480px;
+    border-radius: 16px;
+    padding: 0; /* Changed to use inner padding for consistency */
+    overflow: hidden;
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
+}
+
+.modal-top {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 20px 24px;
+    border-bottom: 1px solid #F3F4F6;
+    margin-bottom: 0;
+}
+
+.modal-top h2 {
+    font-size: 18px;
+    margin: 0;
+}
+
+.modal-top button {
+    background: none;
+    border: none;
+    font-size: 20px;
+    cursor: pointer;
+    color: #9CA3AF;
+}
+
+.modal-form .input-group {
+    margin-bottom: 16px;
+}
+
+.modal-form {
+    padding: 24px;
+}
+
+.modal-form label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 14px;
+    font-weight: 500;
+}
+
+.modal-form input,
+.modal-form textarea {
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #D1D5DB;
+    border-radius: 8px;
+    outline: none;
+}
+
+.modal-btns {
+    display: flex;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.btn-cancel {
+    flex: 1;
+    padding: 10px;
+    border: 1px solid #E5E7EB;
+    border-radius: 8px;
+    background: white;
+    cursor: pointer;
+}
+
+.btn-save {
+    flex: 1;
+    padding: 10px;
+    border: none;
+    border-radius: 8px;
+    background: #2563EB;
+    color: white;
+    cursor: pointer;
+}
+
+.toast-category {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    background: #10B981;
+    color: white;
+    padding: 12px 24px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    z-index: 1000;
+    box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+    }
+
+    to {
+        transform: translateX(0);
+    }
+}
+
+/* Synchronized Confirmation Modal Styles */
+.confirm-modal-cat {
+    background: #ffffff;
+    border-radius: 16px;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+    overflow: hidden;
+    width: 100%;
+    max-width: 400px;
+    text-align: center;
+}
+
+.modal-body-confirm {
+    padding: 32px 24px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+}
+
+.confirm-icon {
+    width: 64px;
+    height: 64px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 32px;
+    margin-bottom: 20px;
+}
+
+.bg-red-light { background-color: #FEE2E2; }
+.txt-red { color: #DC2626; }
+
+.modal-body-confirm h3 {
+    font-size: 20px;
+    font-weight: 700;
+    color: #111827;
+    margin: 0 0 12px 0;
+}
+
+.modal-body-confirm p {
+    font-size: 15px;
+    color: #6B7280;
+    margin: 0;
+    line-height: 1.5;
+}
+
+.modal-footer-confirm {
+    padding: 20px 24px;
+    display: flex;
+    gap: 12px;
+    border-top: 1px solid #F3F4F6;
+}
+
+.btn-outline-simple-cat, .btn-danger-confirm-cat {
+    flex: 1;
+    padding: 12px;
+    border-radius: 12px;
+    font-weight: 600;
+    font-size: 15px;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+
+.btn-outline-simple-cat {
+    background: #ffffff;
+    border: 1px solid #E5E7EB;
+    color: #374151;
+}
+
+.btn-danger-confirm-cat {
+    background: #DC2626;
+    color: #ffffff;
+    border: none;
+}
+
+.btn-danger-confirm-cat:hover { background: #B91C1C; }
