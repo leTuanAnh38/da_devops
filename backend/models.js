@@ -71,6 +71,15 @@ export const WarehouseReceiptItem = sequelize.define('WarehouseReceiptItem', {
   total: { type: DataTypes.INTEGER, defaultValue: 0 }
 });
 
+// 8. Model Thông báo hệ thống
+export const Notification = sequelize.define('Notification', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  title: { type: DataTypes.STRING, allowNull: false },
+  message: { type: DataTypes.TEXT },
+  type: { type: DataTypes.ENUM('INFO', 'SUCCESS', 'WARNING', 'ERROR'), defaultValue: 'INFO' },
+  isRead: { type: DataTypes.BOOLEAN, defaultValue: false }
+});
+
 // THIẾT LẬP QUAN HỆ (ASSOCIATIONS)
 Category.hasMany(Book, { foreignKey: 'categoryId' });
 Book.belongsTo(Category, { foreignKey: 'categoryId' });

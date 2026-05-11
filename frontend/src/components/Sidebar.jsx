@@ -2,7 +2,7 @@ import React from 'react';
 import { FiGrid, FiBox, FiFolder, FiArchive, FiLogOut, FiShoppingCart, FiBell } from 'react-icons/fi';
 import './Sidebar.css';
 
-const Sidebar = ({ currentMenu, setCurrentMenu }) => {
+const Sidebar = ({ currentMenu, setCurrentMenu, unreadCount }) => {
     return (
         <aside className="sidebar-container">
             <div className="sidebar-logo">
@@ -81,7 +81,24 @@ const Sidebar = ({ currentMenu, setCurrentMenu }) => {
                                 setCurrentMenu('notifications');
                             }}
                         >
-                            <FiBell className="menu-icon" /> Thông báo
+                            <div style={{ display: 'flex', alignItems: 'center', width: '100%', justifyContent: 'space-between' }}>
+                                <div style={{ display: 'flex', alignItems: 'center' }}>
+                                    <FiBell className="menu-icon" /> Thông báo
+                                </div>
+                                {unreadCount > 0 && (
+                                    <span style={{ 
+                                        backgroundColor: '#EF4444', 
+                                        color: 'white', 
+                                        fontSize: '11px', 
+                                        fontWeight: 'bold', 
+                                        padding: '2px 6px', 
+                                        borderRadius: '100px',
+                                        marginLeft: '10px'
+                                    }}>
+                                        {unreadCount}
+                                    </span>
+                                )}
+                            </div>
                         </a>
                     </li>
                 </ul>

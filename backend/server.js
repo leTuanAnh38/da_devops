@@ -3,7 +3,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import { Sequelize, Op } from 'sequelize';
 import sequelize from './db.js';
-import { Category, Book, Order, OrderItem, StockCard, WarehouseReceipt, WarehouseReceiptItem } from './models.js';
+import { Category, Book, Order, OrderItem, StockCard, WarehouseReceipt, WarehouseReceiptItem, Notification } from './models.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -15,6 +15,49 @@ app.use(morgan('dev'));
 // 1. Health check
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date() });
+});
+
+// --- API THÔNG BÁO ---
+app.get('/api/notifications', async (req, res) => {
+  try {
+    console.log('--- NHẬN YÊU CẦU LẤY THÔNG BÁO ---');
+    const notifications = await Notification.findAll({
+      order: [['createdAt', 'DESC']],
+      limit: 50
+    });
+    console.log(`--- ĐÃ TRẢ VỀ ${notifications.length} THÔNG BÁO ---`);
+    res.json(notifications);
+  } catch (error) {
+    console.error('LỖI API NOTIFICATIONS:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/notifications/:id/read', async (req, res) => {
+  try {
+    await Notification.update({ isRead: true }, { where: { id: req.params.id } });
+    res.json({ message: 'Đã đánh dấu đã đọc' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.put('/api/notifications/read-all', async (req, res) => {
+  try {
+    await Notification.update({ isRead: true }, { where: { isRead: false } });
+    res.json({ message: 'Đã đánh dấu tất cả là đã đọc' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.delete('/api/notifications/clear', async (req, res) => {
+  try {
+    await Notification.destroy({ where: {} });
+    res.json({ message: 'Đã xóa tất cả thông báo' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // 2. INVENTORY HISTORY (ALL) - Moved to top for priority
@@ -275,13 +318,53 @@ app.post('/api/warehouse/receipts', async (req, res) => {
     await receipt.save({ transaction: t });
 
     await t.commit();
+
+    // TẠO THÔNG BÁO SAU KHI LẬP PHIẾU THÀNH CÔNG
+    try {
+      const displayAmount = (totalAmount || 0).toLocaleString('vi-VN');
+      const displayId = receipt?.id || 'N/A';
+      const displayType = type === 'NHAP' ? 'nhập' : 'xuất';
+
+      console.log('--- DEBUG NOTIFICATION ---', { 
+        title: `Phiếu ${displayType} kho thành công`,
+        message: `Phiếu ${displayId} đã được tạo với tổng tiền ${displayAmount}đ`,
+        type: 'SUCCESS'
+      });
+
+      const newNoti = await Notification.create({
+        title: `Phiếu ${displayType} kho thành công`,
+        message: `Phiếu ${displayId} đã được tạo với tổng tiền ${displayAmount}đ`,
+        type: 'SUCCESS'
+      });
+      console.log('--- ĐÃ TẠO THÔNG BÁO THÀNH CÔNG --- ID:', newNoti.id);
+
+      // Kiểm tra tồn kho thấp cho các mặt hàng trong phiếu
+      if (items && Array.isArray(items)) {
+        for (const item of items) {
+          const book = await Book.findByPk(item.bookId);
+          if (book && book.quantity < 10) {
+            console.log('--- CẢNH BÁO TỒN KHO THẤP ---', book.title, 'SL:', book.quantity);
+            await Notification.create({
+              title: 'Cảnh báo tồn kho thấp',
+              message: `Sách "${book.title}" hiện chỉ còn ${book.quantity} cuốn trong kho.`,
+              type: 'WARNING'
+            });
+          }
+        }
+      }
+    } catch (notifyError) {
+      console.error('!!! LỖI TẠO THÔNG BÁO !!!:', notifyError.message);
+      console.error(notifyError.stack);
+    }
+
     res.status(201).json(receipt);
   } catch (error) {
-    await t.rollback();
+    if (t) await t.rollback();
     res.status(400).json({ error: error.message });
   }
 });
 
+// 6. PHIẾU NHẬP XUẤT CHI TIẾT
 app.get('/api/warehouse/receipts/:id', async (req, res) => {
   try {
     const receipt = await WarehouseReceipt.findByPk(req.params.id, {
