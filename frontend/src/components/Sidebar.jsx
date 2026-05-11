@@ -1,35 +1,87 @@
 import React from 'react';
-import { FiGrid, FiBox, FiFolder, FiArchive, FiLogOut } from 'react-icons/fi';
+import { FiGrid, FiBox, FiFolder, FiArchive, FiLogOut, FiShoppingCart, FiBell } from 'react-icons/fi';
 import './Sidebar.css';
 
-const Sidebar = () => {
+const Sidebar = ({ currentMenu, setCurrentMenu }) => {
     return (
         <aside className="sidebar-container">
             <div className="sidebar-logo">
                 <h2>Quản lý kho</h2>
-                <p>Kho sách</p>
+                <p>Quản lý kho sách</p>
             </div>
 
             <nav className="sidebar-menu">
                 <ul>
-                    <li>
-                        <a href="#dashboard" className="menu-item">
+                    <li className={currentMenu === 'dashboard' ? 'active' : ''}>
+                        <a 
+                            href="#dashboard" 
+                            className="menu-item"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                setCurrentMenu('dashboard');
+                            }}
+                        >
                             <FiGrid className="menu-icon" /> Dashboard
                         </a>
                     </li>
-                    <li className="active">
-                        <a href="#products" className="menu-item">
+                    <li className={currentMenu === 'products' ? 'active' : ''}>
+                        <a 
+                            href="#products" 
+                            className="menu-item"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                setCurrentMenu('products');
+                            }}
+                        >
                             <FiBox className="menu-icon" /> Sản phẩm
                         </a>
                     </li>
-                    <li>
-                        <a href="#categories" className="menu-item">
+                    <li className={currentMenu === 'categories' ? 'active' : ''}>
+                        <a 
+                            href="#categories" 
+                            className="menu-item"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                setCurrentMenu('categories');
+                            }}
+                        >
                             <FiFolder className="menu-icon" /> Danh mục
                         </a>
                     </li>
-                    <li>
-                        <a href="#inventory" className="menu-item">
+                    <li className={currentMenu === 'orders' ? 'active' : ''}>
+                        <a 
+                            href="#orders" 
+                            className="menu-item"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                setCurrentMenu('orders');
+                            }}
+                        >
+                            <FiShoppingCart className="menu-icon" /> Đơn hàng
+                        </a>
+                    </li>
+                    <li className={currentMenu === 'inventory' ? 'active' : ''}>
+                        <a 
+                            href="#inventory" 
+                            className="menu-item"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                setCurrentMenu('inventory');
+                            }}
+                        >
                             <FiArchive className="menu-icon" /> Kho hàng
+                        </a>
+                    </li>
+                    <li className={currentMenu === 'notifications' ? 'active' : ''}>
+                        <a 
+                            href="#notifications" 
+                            className="menu-item"
+                            onClick={(e) => {
+                                e.preventDefault();
+                                setCurrentMenu('notifications');
+                            }}
+                        >
+                            <FiBell className="menu-icon" /> Thông báo
                         </a>
                     </li>
                 </ul>

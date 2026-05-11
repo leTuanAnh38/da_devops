@@ -3,11 +3,11 @@ import axios from 'axios';
 import { 
     FiPlus, FiSearch, FiMoreVertical, FiRefreshCcw, FiFilter, 
     FiBell, FiChevronLeft, FiChevronRight, FiX,
-    FiCopy, FiLayers, FiEye, FiEdit2, FiTrash2
+    FiCopy, FiLayers, FiEye, FiEdit2, FiTrash2, FiCheckCircle, FiChevronDown
 } from 'react-icons/fi';
 import './BookInventory.css';
 
-const BookInventory = () => {
+const BookInventory = ({ setCurrentMenu }) => {
     const [books, setBooks] = useState([]);
     const [loading, setLoading] = useState(true);
     
@@ -116,10 +116,22 @@ const BookInventory = () => {
     const handleAddSubmit = (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
-        if (!formData.get('title') || !formData.get('category') || !formData.get('price') || !formData.get('quantity')) {
-            setFormError('Vui lòng điền đầy đủ thông tin');
+        const newBook = {
+            id: `#${Math.floor(Math.random() * 900) + 100}`,
+            title: formData.get('title'),
+            category: formData.get('category'),
+            price: parseInt(formData.get('price')),
+            quantity: parseInt(formData.get('quantity')),
+            unit: formData.get('unit'),
+            status: parseInt(formData.get('quantity')) > 20 ? 'Còn hàng' : 'Sắp hết'
+        };
+
+        if (!newBook.title || !newBook.category || isNaN(newBook.price) || isNaN(newBook.quantity)) {
+            setFormError('Vui lòng điền đầy đủ và đúng định dạng thông tin');
             return;
         }
+
+        setBooks([...books, newBook]);
         setIsAddModalOpen(false);
         setFormError('');
         showToast('Thêm sách thành công!', 'success');
@@ -131,6 +143,19 @@ const BookInventory = () => {
     
     const handleEditSubmit = (e) => {
         e.preventDefault();
+        const formData = new FormData(e.target);
+        const updatedBookData = {
+            title: e.target.elements[0].value,
+            category: e.target.elements[1].value,
+            price: parseInt(e.target.elements[2].value),
+            quantity: parseInt(e.target.elements[3].value),
+            unit: currentBook.unit // simplified for this example
+        };
+
+        setBooks(books.map(book => 
+            book.id === currentBook.id ? { ...book, ...updatedBookData, status: updatedBookData.quantity > 20 ? 'Còn hàng' : 'Sắp hết' } : book
+        ));
+
         setIsEditModalOpen(false);
         showToast('Chỉnh sửa sách thành công!', 'success');
     };
@@ -138,13 +163,21 @@ const BookInventory = () => {
     const openDeleteModal = (book) => { setCurrentBook(book); setIsDeleteModalOpen(true); closeMenu(); };
     
     const handleConfirmDelete = () => {
+        const target = currentBook;
+        setBooks(books.filter(book => book.id !== target.id));
         setIsDeleteModalOpen(false);
         showToast('Xóa sách thành công!', 'success');
+        setCurrentBook(null);
     };
 
     return (
         <div className="book-inventory-container">
-            {toast.show && <div className={`toast-message toast-${toast.type}`}>{toast.message}</div>}
+            {/* Toast Thông báo */}
+            {toast.show && (
+                <div className="toast-category">
+                    <FiCheckCircle /> {toast.message}
+                </div>
+            )}
             
             {activeMenuId && <div className="menu-backdrop" onClick={closeMenu}></div>}
 
@@ -152,12 +185,6 @@ const BookInventory = () => {
                 <div className="header-title">
                     <h1>Quản lý sách</h1>
                     <p>Danh sách sách hiện có trong kho</p>
-                </div>
-                <div className="header-actions">
-                    <div className="notification-wrapper" style={{cursor: 'pointer'}}>
-                        <FiBell className="icon-bell" />
-                        <span className="badge-noti">2</span>
-                    </div>
                 </div>
             </header>
 
@@ -481,20 +508,21 @@ const BookInventory = () => {
             {/* MODAL XÓA SÁCH */}
             {isDeleteModalOpen && currentBook && (
                 <div className="modal-overlay">
-                    <div className="modal-content modal-sm">
-                        <div className="modal-header border-0">
-                            <h2>Xác nhận xóa</h2>
-                            <button type="button" className="btn-close" onClick={() => setIsDeleteModalOpen(false)}><FiX /></button>
-                        </div>
-                        <div className="modal-body pb-0">
-                            <p style={{ fontSize: '15px', color: '#6B7280', margin: 0, lineHeight: '1.5' }}>
-                                Bạn có chắc chắn muốn xóa sách <strong style={{ color: '#111827' }}>{currentBook.title}</strong>?<br/>
+                    <div className="modal-box confirm-modal">
+                        <div className="modal-body-confirm">
+                            <div className="confirm-icon bg-red-light">
+                                <FiTrash2 className="txt-red" />
+                            </div>
+                            <h3>Xác nhận xóa sách</h3>
+                            <p>
+                                Bạn có chắc chắn muốn xóa sách 
+                                <strong> {currentBook.title}</strong> không? 
                                 Hành động này không thể hoàn tác.
                             </p>
                         </div>
-                        <div className="modal-footer border-0">
-                            <button type="button" className="btn-cancel" onClick={() => setIsDeleteModalOpen(false)}>Hủy</button>
-                            <button type="button" className="btn-danger-fill" onClick={handleConfirmDelete}>Xóa</button>
+                        <div className="modal-footer-confirm">
+                            <button className="btn-outline-simple-cat" onClick={() => setIsDeleteModalOpen(false)}>Hủy</button>
+                            <button className="btn-danger-confirm-cat" onClick={handleConfirmDelete}>Xác nhận xóa</button>
                         </div>
                     </div>
                 </div>

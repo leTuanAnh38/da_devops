@@ -183,19 +183,46 @@
 // }
 
 // export default App;
-import React from 'react';
+import React, { useState } from 'react';
 import Sidebar from './components/Sidebar';
 import BookInventory from './pages/BookInventory';
+import Dashboard from './pages/Dashboard';
+import CategoryManager from './pages/CategoryManager';
+import InventoryManager from './pages/InventoryManager';
+import OrderManager from './pages/OrderManager';
+import NotificationManager from './pages/NotificationManager';
+import { FiBell } from 'react-icons/fi';
 
 function App() {
+  // State quản lý trang hiện tại đang hiển thị
+  const [currentMenu, setCurrentMenu] = useState('dashboard');
+
   return (
-    <div style={{ display: 'flex' }}>
-      {/* Cột bên trái: Sidebar cố định */}
-      <Sidebar />
-      
-      {/* Cột bên phải: Nội dung trang */}
-      <div style={{ flex: 1, marginLeft: '240px' }}> 
-        <BookInventory />
+    <div style={{ display: 'flex', position: 'relative' }}>
+      {/* Nút thông báo toàn cầu - Luôn hiển thị */}
+      <div className="header-noti-wrapper global-bell" onClick={() => setCurrentMenu('notifications')}>
+          <FiBell className="bell-icon-top" />
+          <span className="bell-badge-top">2</span>
+      </div>
+
+      {/* Truyền state xuống Sidebar để nó biết đang ở đâu */}
+      <Sidebar currentMenu={currentMenu} setCurrentMenu={setCurrentMenu} />
+
+      <div style={{ flex: 1, marginLeft: '240px' }}>
+        {/* Điều kiện hiển thị: Menu nào thì hiện Component nấy */}
+        {currentMenu === 'dashboard' && <Dashboard setCurrentMenu={setCurrentMenu} />}
+        {currentMenu === 'products' && <BookInventory setCurrentMenu={setCurrentMenu} />}
+        {currentMenu === 'categories' && <CategoryManager setCurrentMenu={setCurrentMenu} />}
+        {currentMenu === 'inventory' && <InventoryManager setCurrentMenu={setCurrentMenu} />}
+        {currentMenu === 'orders' && <OrderManager setCurrentMenu={setCurrentMenu} />}
+        {currentMenu === 'notifications' && <NotificationManager />}
+
+        {/* Các trang chưa làm sẽ hiển thị tạm dòng thông báo */}
+        {(currentMenu === 'units') && (
+          <div style={{ padding: '40px', fontSize: '20px', color: '#6B7280' }}>
+            Giao diện <b>{currentMenu}</b> đang được xây dựng...
+          </div>
+        )}
       </div>
     </div>
   );
