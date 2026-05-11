@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import {
-    FiRotateCw, FiPlus, FiX, FiPackage, FiTruck, FiCornerUpLeft, FiAlertCircle, FiTrendingUp, FiTrendingDown, FiClock, FiFileText, FiUser, FiPrinter, FiPlusCircle, FiTrash2, FiSearch
+    FiRotateCw, FiPlus, FiX, FiPackage, FiTruck, FiCornerUpLeft, FiAlertCircle, FiTrendingUp, FiTrendingDown, FiClock, FiFileText, FiUser, FiPrinter, FiPlusCircle, FiTrash2, FiSearch, FiPhone, FiMapPin
 } from 'react-icons/fi';
 import Swal from 'sweetalert2';
 import './InventoryManager.css';
@@ -161,6 +161,8 @@ const InventoryManager = () => {
         const receiptData = {
             type: receiptType,
             partnerName: formData.get('partnerName'),
+            partnerPhone: formData.get('partnerPhone'),
+            partnerAddress: formData.get('partnerAddress'),
             creatorName: formData.get('creatorName'),
             note: formData.get('note'),
             items: receiptItems.filter(item => item.bookId && item.quantity > 0)
@@ -419,6 +421,14 @@ const InventoryManager = () => {
                                     <label><FiUser /> Người lập phiếu</label>
                                     <input type="text" name="creatorName" placeholder="Tên nhân viên..." required />
                                 </div>
+                                <div className="input-group">
+                                    <label><FiPhone /> Số điện thoại đối tác</label>
+                                    <input type="text" name="partnerPhone" placeholder="SĐT liên hệ..." />
+                                </div>
+                                <div className="input-group">
+                                    <label><FiMapPin /> Địa chỉ đối tác</label>
+                                    <input type="text" name="partnerAddress" placeholder="Địa chỉ chi tiết..." />
+                                </div>
                             </div>
 
                             <div className="receipt-items-section">
@@ -502,9 +512,15 @@ const InventoryManager = () => {
                             </div>
                             
                             <div className="print-info">
-                                <p><strong>Đối tác:</strong> {selectedReceipt.partnerName || '---'}</p>
-                                <p><strong>Người lập:</strong> {selectedReceipt.creatorName || '---'}</p>
-                                <p><strong>Ghi chú:</strong> {selectedReceipt.note || '---'}</p>
+                                <div className="info-row">
+                                    <p><strong>Đối tác:</strong> {selectedReceipt.partnerName || '---'}</p>
+                                    <p><strong>Điện thoại:</strong> {selectedReceipt.partnerPhone || '---'}</p>
+                                </div>
+                                <p><strong>Địa chỉ:</strong> {selectedReceipt.partnerAddress || '---'}</p>
+                                <div className="info-row">
+                                    <p><strong>Người lập:</strong> {selectedReceipt.creatorName || '---'}</p>
+                                    <p><strong>Ghi chú:</strong> {selectedReceipt.note || '---'}</p>
+                                </div>
                             </div>
 
                             <table className="print-table">

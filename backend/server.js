@@ -164,7 +164,10 @@ app.delete('/api/books/:id', async (req, res) => {
 // 4. ORDERS CRUD
 app.get('/api/orders', async (req, res) => {
   try {
-    const orders = await Order.findAll({ include: [OrderItem] });
+    const orders = await Order.findAll({ 
+      include: [{ model: OrderItem, include: [Book] }],
+      order: [['createdAt', 'DESC']]
+    });
     res.json(orders);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -174,40 +177,32 @@ app.get('/api/orders', async (req, res) => {
 app.post('/api/orders', async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { id, customer, items } = req.body; // items: [{ bookId, qty, price }]
+    const { customer, phone, address, note, items } = req.body;
     
-    const order = await Order.create(req.body, { transaction: t });
+    // Tạo đơn hàng (Chưa trừ kho)
+    const order = await Order.create({
+      id: `DH${Date.now()}`,
+      customer,
+      phone,
+      address,
+      note,
+      status: 'Chờ xác nhận'
+    }, { transaction: t });
     
     let totalAmount = 0;
     for (const item of items) {
       const book = await Book.findByPk(item.bookId, { transaction: t });
-      if (!book || book.quantity < item.qty) {
-        throw new Error(`Sách ${item.bookId} không đủ tồn kho`);
-      }
+      if (!book) throw new Error(`Không tìm thấy sách mã ${item.bookId}`);
       
-      const itemTotal = item.qty * item.price;
+      const itemTotal = item.qty * (item.price || book.price);
       totalAmount += itemTotal;
       
       await OrderItem.create({
         orderId: order.id,
         bookId: item.bookId,
         qty: item.qty,
-        price: item.price,
+        price: item.price || book.price,
         total: itemTotal
-      }, { transaction: t });
-      
-      // Cập nhật kho
-      const oldStock = book.quantity;
-      book.quantity -= item.qty;
-      await book.save({ transaction: t });
-      
-      // Ghi thẻ kho
-      await StockCard.create({
-        bookId: book.id,
-        type: 'BAN_HANG',
-        change: -item.qty,
-        currentStock: book.quantity,
-        note: `Bán theo đơn hàng ${order.id}`
       }, { transaction: t });
     }
     
@@ -219,6 +214,98 @@ app.post('/api/orders', async (req, res) => {
   } catch (error) {
     await t.rollback();
     res.status(400).json({ error: error.message });
+  }
+});
+
+app.put('/api/orders/:id', async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const order = await Order.findByPk(req.params.id, {
+      include: [OrderItem]
+    });
+    if (!order) return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
+
+    const oldStatus = order.status;
+    const newStatus = req.body.status;
+
+    // Cập nhật thông tin cơ bản
+    await order.update(req.body, { transaction: t });
+
+    // TỰ ĐỘNG HÓA: KHI CHUYỂN SANG "HOÀN THÀNH"
+    if (oldStatus !== 'Hoàn thành' && newStatus === 'Hoàn thành') {
+      // 1. Tạo Phiếu Xuất Kho tự động
+      const receipt = await WarehouseReceipt.create({
+        id: `PX_AUTO_${order.id}`,
+        type: 'XUAT',
+        partnerName: order.customer,
+        partnerPhone: order.phone,
+        partnerAddress: order.address,
+        creatorName: 'Hệ thống (Tự động)',
+        totalAmount: order.totalAmount,
+        note: `Xuất kho tự động cho đơn hàng ${order.id}`
+      }, { transaction: t });
+
+      // 2. Xử lý từng mặt hàng: Trừ kho + Tạo chi tiết phiếu + Ghi thẻ kho
+      for (const item of order.OrderItems) {
+        const book = await Book.findByPk(item.bookId, { transaction: t });
+        if (!book) throw new Error(`Không tìm thấy sách ${item.bookId}`);
+        if (book.quantity < item.qty) {
+          throw new Error(`Sách "${book.title}" không đủ tồn kho để hoàn thành đơn hàng (Cần: ${item.qty}, Hiện có: ${book.quantity})`);
+        }
+
+        // Trừ kho
+        book.quantity -= item.qty;
+        await book.save({ transaction: t });
+
+        // Chi tiết phiếu xuất
+        await WarehouseReceiptItem.create({
+          receiptId: receipt.id,
+          bookId: item.bookId,
+          quantity: item.qty,
+          price: item.price,
+          total: item.total
+        }, { transaction: t });
+
+        // Ghi thẻ kho
+        await StockCard.create({
+          bookId: book.id,
+          type: 'XUAT',
+          change: -item.qty,
+          currentStock: book.quantity,
+          note: `Xuất kho tự động (Đơn hàng ${order.id})`
+        }, { transaction: t });
+      }
+
+      // 3. Tạo thông báo thành công
+      await Notification.create({
+        title: 'Xuất kho tự động thành công',
+        message: `Đơn hàng ${order.id} đã hoàn thành. Hệ thống đã tự động tạo phiếu xuất kho PX_AUTO_${order.id} và cập nhật tồn kho.`,
+        type: 'SUCCESS'
+      }, { transaction: t });
+    }
+
+    await t.commit();
+    res.json(order);
+  } catch (error) {
+    await t.rollback();
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.delete('/api/orders/:id', async (req, res) => {
+  try {
+    const order = await Order.findByPk(req.params.id);
+    if (!order) return res.status(404).json({ error: 'Không tìm thấy đơn hàng' });
+    
+    // Nếu đơn đã hoàn thành thì cân nhắc có cho xóa không? Thường là không.
+    if (order.status === 'Hoàn thành') {
+      return res.status(400).json({ error: 'Không thể xóa đơn hàng đã hoàn thành và xuất kho' });
+    }
+
+    await order.destroy();
+    res.json({ message: 'Đã xóa đơn hàng' });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 
@@ -271,12 +358,14 @@ app.get('/api/warehouse/receipts', async (req, res) => {
 app.post('/api/warehouse/receipts', async (req, res) => {
   const t = await sequelize.transaction();
   try {
-    const { id, type, partnerName, creatorName, items, note } = req.body;
+    const { id, type, partnerName, partnerPhone, partnerAddress, creatorName, items, note } = req.body;
     
     const receipt = await WarehouseReceipt.create({
       id: id || `${type === 'NHAP' ? 'PN' : 'PX'}${Date.now()}`,
       type,
       partnerName,
+      partnerPhone,
+      partnerAddress,
       creatorName,
       note
     }, { transaction: t });

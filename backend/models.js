@@ -58,6 +58,8 @@ export const WarehouseReceipt = sequelize.define('WarehouseReceipt', {
   id: { type: DataTypes.STRING, primaryKey: true }, // PN001, PX001
   type: { type: DataTypes.STRING, allowNull: false }, // NHAP, XUAT
   partnerName: { type: DataTypes.STRING }, // Tên NCC hoặc Khách hàng
+  partnerPhone: { type: DataTypes.STRING }, // Số điện thoại đối tác
+  partnerAddress: { type: DataTypes.STRING }, // Địa chỉ đối tác
   creatorName: { type: DataTypes.STRING }, // Tên nhân viên lập phiếu
   totalAmount: { type: DataTypes.INTEGER, defaultValue: 0 },
   status: { type: DataTypes.STRING, defaultValue: 'Hoàn thành' }, // Hoàn thành, Đã hủy

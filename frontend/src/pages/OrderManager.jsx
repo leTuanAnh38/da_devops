@@ -1,29 +1,76 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { 
     FiPlus, FiSearch, FiMoreVertical, FiRefreshCcw, FiFilter, 
     FiBell, FiChevronLeft, FiChevronRight, FiX,
-    FiEye, FiEdit2, FiTrash2, FiCheckCircle, FiChevronDown, FiCheck
+    FiEye, FiEdit2, FiTrash2, FiCheckCircle, FiChevronDown, FiCheck, FiUser, FiMapPin, FiPhone, FiFileText, FiPlusCircle, FiShoppingBag
 } from 'react-icons/fi';
+import Swal from 'sweetalert2';
 import './OrderManager.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
+const OrderItemRow = React.memo(({ item, index, books, onUpdate, onRemove }) => {
+    return (
+        <tr>
+            <td style={{ width: '50%' }}>
+                <select 
+                    value={item.bookId} 
+                    onChange={(e) => onUpdate(index, 'bookId', e.target.value)}
+                    required
+                >
+                    <option value="">-- Chọn sách --</option>
+                    {books.map(b => (
+                        <option key={b.id} value={b.id}>{b.title} (Giá: {b.price.toLocaleString()}đ)</option>
+                    ))}
+                </select>
+            </td>
+            <td>
+                <input 
+                    type="number" 
+                    min="1" 
+                    value={item.qty}
+                    onChange={(e) => onUpdate(index, 'qty', parseInt(e.target.value) || 0)}
+                />
+            </td>
+            <td className="txt-bold">{(item.qty * item.price).toLocaleString()}đ</td>
+            <td>
+                <button type="button" className="btn-remove-item" onClick={() => onRemove(index)}>
+                    <FiTrash2 />
+                </button>
+            </td>
+        </tr>
+    );
+});
+
 const OrderManager = ({ setCurrentMenu }) => {
     const [orders, setOrders] = useState([]);
+    const [books, setBooks] = useState([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         fetchOrders();
+        fetchBooks();
     }, []);
 
     const fetchOrders = async () => {
         try {
-            const res = await axios.get(`${API_URL}/orders`);
-            setOrders(res.data);
+            const res = await fetch(`${API_URL}/orders`);
+            const data = await res.json();
+            setOrders(Array.isArray(data) ? data : []);
             setLoading(false);
         } catch (err) {
             console.error("Lỗi khi tải đơn hàng:", err);
             setLoading(false);
+        }
+    };
+
+    const fetchBooks = async () => {
+        try {
+            const res = await fetch(`${API_URL}/books`);
+            const data = await res.json();
+            setBooks(data);
+        } catch (err) {
+            console.error(err);
         }
     };
     
@@ -31,7 +78,6 @@ const OrderManager = ({ setCurrentMenu }) => {
     const [searchTerm, setSearchTerm] = useState('');
     const [statusFilter, setStatusFilter] = useState('all');
     const [activeMenuId, setActiveMenuId] = useState(null);
-    const [confirmModal, setConfirmModal] = useState({ isOpen: false, type: '', target: null });
     const [toast, setToast] = useState({ show: false, message: '' });
 
     // Modal States
@@ -41,116 +87,184 @@ const OrderManager = ({ setCurrentMenu }) => {
     const [selectedOrder, setSelectedOrder] = useState(null);
     const [isFilterOpen, setIsFilterOpen] = useState(false);
     const [filters, setFilters] = useState({ date: '', minTotal: '', maxTotal: '' });
+    
+    // Items state for Add/Edit
+    const [orderItems, setOrderItems] = useState([{ bookId: '', qty: 1, price: 0 }]);
 
     // 3. XỬ LÝ LOGIC
-    const filteredOrders = orders.filter(order => {
-        const matchesSearch = order.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                             order.customer.toLowerCase().includes(searchTerm.toLowerCase());
-        const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-        // Logic lọc nâng cao (tùy chỉnh thêm nếu cần)
-        return matchesSearch && matchesStatus;
-    });
+    const filteredOrders = useMemo(() => {
+        return orders.filter(order => {
+            const matchesSearch = 
+                order.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
+                order.customer.toLowerCase().includes(searchTerm.toLowerCase());
+            
+            const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
+            
+            return matchesSearch && matchesStatus;
+        });
+    }, [orders, searchTerm, statusFilter]);
 
     const clearFilters = () => {
         setFilters({ date: '', minTotal: '', maxTotal: '' });
         setStatusFilter('all');
     };
 
-    const showToast = (message) => {
-        setToast({ show: true, message });
-        setTimeout(() => setToast({ show: false, message: '' }), 3000);
-    };
-
     const handleRefresh = () => {
         fetchOrders();
-        showToast('Đã làm mới danh sách đơn hàng');
+        Swal.fire({
+            icon: 'success',
+            title: 'Đã làm mới!',
+            toast: true,
+            position: 'top-end',
+            showConfirmButton: false,
+            timer: 2000
+        });
     };
 
-    const handleOpenConfirm = (type, order) => {
-        setConfirmModal({ isOpen: true, type, target: order });
+    const handleUpdateStatus = async (orderId, newStatus) => {
         setActiveMenuId(null);
-    };
+        
+        const confirmResult = await Swal.fire({
+            title: `Xác nhận chuyển sang ${newStatus}?`,
+            text: newStatus === 'Hoàn thành' ? "Hệ thống sẽ tự động tạo Phiếu xuất kho và trừ tồn kho!" : "",
+            icon: 'question',
+            showCancelButton: true,
+            confirmButtonColor: newStatus === 'Hoàn thành' ? '#10B981' : '#3B82F6',
+            cancelButtonColor: '#6B7280',
+            confirmButtonText: 'Đồng ý',
+            cancelButtonText: 'Hủy'
+        });
 
-    const handleConfirmAction = async () => {
-        const { type, target } = confirmModal;
+        if (!confirmResult.isConfirmed) return;
+
         try {
-            if (type === 'delete') {
-                await axios.delete(`${API_URL}/orders/${target.id}`);
-                setOrders(orders.filter(o => o.id !== target.id));
-                showToast(`Đã xóa đơn hàng ${target.id}`);
-            } else if (type === 'approve') {
-                await axios.put(`${API_URL}/orders/${target.id}`, { status: 'Đã xác nhận' });
+            const res = await fetch(`${API_URL}/orders/${orderId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ status: newStatus })
+            });
+            const data = await res.json();
+
+            if (res.ok) {
+                Swal.fire({
+                    icon: 'success',
+                    title: 'Thành công',
+                    text: newStatus === 'Hoàn thành' ? 'Đơn hàng đã hoàn thành và xuất kho tự động!' : 'Đã cập nhật trạng thái!',
+                    timer: 2500,
+                    showConfirmButton: false
+                });
                 fetchOrders();
-                showToast(`Đã xác nhận đơn hàng ${target.id}`);
+            } else {
+                throw new Error(data.error || 'Lỗi cập nhật');
             }
         } catch (err) {
-            showToast("Lỗi khi thực hiện thao tác");
+            Swal.fire('Lỗi', err.message, 'error');
         }
-        setConfirmModal({ isOpen: false, type: '', target: null });
     };
 
-    const handleViewDetail = (order) => {
-        setSelectedOrder(order);
-        setIsViewModalOpen(true);
+    const handleDeleteOrder = async (orderId) => {
         setActiveMenuId(null);
+        const result = await Swal.fire({
+            title: 'Xác nhận xóa?',
+            text: "Dữ liệu đơn hàng sẽ bị xóa vĩnh viễn!",
+            icon: 'warning',
+            showCancelButton: true,
+            confirmButtonColor: '#EF4444',
+            confirmButtonText: 'Xóa ngay',
+            cancelButtonText: 'Hủy'
+        });
+
+        if (result.isConfirmed) {
+            try {
+                const res = await fetch(`${API_URL}/orders/${orderId}`, { method: 'DELETE' });
+                if (res.ok) {
+                    Swal.fire('Đã xóa!', 'Đơn hàng đã được loại bỏ.', 'success');
+                    fetchOrders();
+                } else {
+                    const data = await res.json();
+                    Swal.fire('Lỗi', data.error || 'Không thể xóa', 'error');
+                }
+            } catch (err) {
+                Swal.fire('Lỗi', 'Lỗi kết nối máy chủ', 'error');
+            }
+        }
     };
 
-    const handleOpenEdit = (order) => {
-        setSelectedOrder(order);
-        setIsEditModalOpen(true);
-        setActiveMenuId(null);
+    const addOrderItem = () => setOrderItems([...orderItems, { bookId: '', qty: 1, price: 0 }]);
+    
+    const removeOrderItem = (index) => {
+        setOrderItems(orderItems.filter((_, i) => i !== index));
     };
 
-    const handleSubmit = async (e, type) => {
+    const updateOrderItem = (index, field, value) => {
+        const newItems = [...orderItems];
+        newItems[index][field] = value;
+        
+        if (field === 'bookId' && value) {
+            const book = books.find(b => b.id === value);
+            if (book) newItems[index].price = book.price;
+        }
+        
+        setOrderItems(newItems);
+    };
+
+    const totalAmountValue = useMemo(() => {
+        return orderItems.reduce((sum, i) => sum + (i.qty * i.price), 0);
+    }, [orderItems]);
+
+    const handleAddSubmit = async (e) => {
         e.preventDefault();
-        const form = e.target;
-        const formData = {
-            id: `DH${Math.floor(Math.random() * 900) + 100}`,
-            customer: form.elements[0].value,
-            phone: form.elements[1].value,
-            address: form.elements[2].value,
-            note: form.elements[3].value,
-            items: [] // Ở bản demo đơn giản, ta để trống items hoặc bổ sung logic chọn sách
+        const formData = new FormData(e.target);
+        
+        const validItems = orderItems.filter(item => item.bookId && item.qty > 0);
+        if (validItems.length === 0) {
+            return Swal.fire('Cảnh báo', 'Vui lòng thêm ít nhất 1 cuốn sách', 'warning');
+        }
+
+        const orderData = {
+            customer: formData.get('customer'),
+            phone: formData.get('phone'),
+            address: formData.get('address'),
+            note: formData.get('note'),
+            items: validItems
         };
 
         try {
-            if (type === 'add') {
-                await axios.post(`${API_URL}/orders`, formData);
-                showToast("Tạo đơn hàng thành công!");
+            const res = await fetch(`${API_URL}/orders`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(orderData)
+            });
+
+            if (res.ok) {
+                Swal.fire('Thành công', 'Đơn hàng mới đã được tạo', 'success');
+                setIsAddModalOpen(false);
+                setOrderItems([{ bookId: '', qty: 1, price: 0 }]);
+                fetchOrders();
             } else {
-                await axios.put(`${API_URL}/orders/${selectedOrder.id}`, formData);
-                showToast("Cập nhật thành công!");
+                const data = await res.json();
+                Swal.fire('Lỗi', data.error || 'Lỗi khi tạo đơn hàng', 'error');
             }
-            fetchOrders();
-            setIsAddModalOpen(false);
-            setIsEditModalOpen(false);
         } catch (err) {
-            showToast("Lỗi: " + (err.response?.data?.error || err.message));
+            Swal.fire('Lỗi', 'Lỗi kết nối máy chủ', 'error');
         }
     };
 
     const formatPrice = (price) => {
-        return new Intl.NumberFormat('vi-VN').format(price) + 'đ';
+        return (price || 0).toLocaleString('vi-VN') + 'đ';
     };
 
     return (
         <div className="order-container">
-            {/* Toast Thông báo */}
-            {toast.show && (
-                <div className="toast-category">
-                    <FiCheckCircle /> {toast.message}
-                </div>
-            )}
-
             <header className="order-header">
                 <div className="header-info">
-                    <h1>Quản lý đơn hàng</h1>
-                    <p>Theo dõi và xử lý đơn hàng</p>
+                    <h1><FiShoppingBag /> Quản lý đơn hàng</h1>
+                    <p>Theo dõi và xử lý đơn hàng chuyên nghiệp</p>
                 </div>
                 <div className="header-actions">
-                    <button className="btn-refresh" onClick={handleRefresh}><FiRefreshCcw /></button>
+                    <button className="btn-icon-square" onClick={handleRefresh} title="Làm mới"><FiRefreshCcw /></button>
                     <button className="btn-add-order" onClick={() => setIsAddModalOpen(true)}>
-                        <FiPlus /> Tạo đơn hàng
+                        <FiPlus /> Tạo đơn hàng mới
                     </button>
                 </div>
             </header>
@@ -161,7 +275,7 @@ const OrderManager = ({ setCurrentMenu }) => {
                         <FiSearch className="search-icon" />
                         <input 
                             type="text" 
-                            placeholder="Tìm kiếm theo mã đơn hoặc khách hàng..." 
+                            placeholder="Tìm kiếm theo mã đơn hoặc tên khách hàng..." 
                             value={searchTerm}
                             onChange={(e) => setSearchTerm(e.target.value)}
                         />
@@ -175,177 +289,147 @@ const OrderManager = ({ setCurrentMenu }) => {
                         </select>
                         <FiChevronDown className="select-icon-small" />
                     </div>
-                    <button className={`btn-filter-toggle ${isFilterOpen ? 'active' : ''}`} onClick={() => setIsFilterOpen(!isFilterOpen)}>
-                        <FiFilter /> Bộ lọc
-                    </button>
                 </div>
-
-                {/* Filter Panel */}
-                {isFilterOpen && (
-                    <div className="filter-panel-order">
-                        <div className="filter-panel-header">
-                            <h3>Lọc nâng cao:</h3>
-                            {(filters.date || filters.minTotal || filters.maxTotal || statusFilter !== 'all') && (
-                                <button className="btn-clear-filter-order" onClick={clearFilters}>Xóa bộ lọc</button>
-                            )}
-                        </div>
-                        <div className="filter-panel-grid">
-                            <div className="filter-panel-group">
-                                <label>Ngày đặt</label>
-                                <input type="text" placeholder="DD/MM/YYYY" value={filters.date} onChange={(e) => setFilters({...filters, date: e.target.value})} />
-                            </div>
-                            <div className="filter-panel-group">
-                                <label>Giá từ</label>
-                                <input type="number" placeholder="0" value={filters.minTotal} onChange={(e) => setFilters({...filters, minTotal: e.target.value})} />
-                            </div>
-                            <div className="filter-panel-group">
-                                <label>Giá đến</label>
-                                <input type="number" placeholder="999,999,999" value={filters.maxTotal} onChange={(e) => setFilters({...filters, maxTotal: e.target.value})} />
-                            </div>
-                        </div>
-                    </div>
-                )}
             </div>
 
             <main className="order-main">
-                <table className="order-table">
-                    <thead>
-                        <tr>
-                            <th>Mã đơn</th>
-                            <th>Khách hàng</th>
-                            <th>Ngày đặt</th>
-                            <th>Số mặt hàng</th>
-                            <th>Tổng tiền</th>
-                            <th>Trạng thái</th>
-                            <th>Thao tác</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {filteredOrders.map((order) => (
-                            <tr key={order.id}>
-                                <td className="txt-bold">{order.id}</td>
-                                <td>{order.customer}</td>
-                                <td className="txt-gray">{order.date}</td>
-                                <td>{order.itemsCount} mặt hàng</td>
-                                <td className="txt-bold">{formatPrice(order.totalAmount)}</td>
-                                <td>
-                                    <span className={`badge-status ${order.status === 'Chờ xác nhận' ? 'pending' : order.status === 'Đã xác nhận' ? 'confirmed' : 'completed'}`}>
-                                        {order.status}
-                                    </span>
-                                </td>
-                                <td className="action-cell">
-                                    <div className="action-button-group">
-                                        <button className="btn-icon-square" onClick={() => handleViewDetail(order)}><FiEye /></button>
-                                        <button className="btn-icon-square" onClick={() => setActiveMenuId(activeMenuId === order.id ? null : order.id)}>
-                                            <FiMoreVertical />
-                                        </button>
-                                        
-                                        {activeMenuId === order.id && (
-                                            <>
-                                                <div className="menu-backdrop-transparent" onClick={() => setActiveMenuId(null)}></div>
-                                                <div className="order-dropdown custom-dropdown">
-                                                    <div className="dropdown-header">CHỈNH SỬA</div>
-                                                    <button onClick={() => handleViewDetail(order)}>
-                                                        <div className="btn-label"><FiEye /> <span>Xem chi tiết</span></div>
-                                                        <span className="shortcut">Ctrl+I</span>
-                                                    </button>
-                                                    <button onClick={() => handleOpenEdit(order)}>
-                                                        <div className="btn-label"><FiEdit2 /> <span>Chỉnh sửa</span></div>
-                                                        <span className="shortcut">Ctrl+E</span>
-                                                    </button>
-                                                    <button className="txt-red" onClick={() => handleOpenConfirm('delete', order)}>
-                                                        <div className="btn-label"><FiTrash2 /> <span>Xóa</span></div>
-                                                        <span className="shortcut">Del</span>
-                                                    </button>
-                                                </div>
-                                            </>
-                                        )}
-                                    </div>
-                                </td>
+                {loading ? (
+                    <div className="loading-state">Đang tải danh sách đơn hàng...</div>
+                ) : (
+                    <table className="order-table">
+                        <thead>
+                            <tr>
+                                <th>Mã đơn</th>
+                                <th>Khách hàng</th>
+                                <th>Ngày đặt</th>
+                                <th>Tổng tiền</th>
+                                <th>Trạng thái</th>
+                                <th>Thao tác</th>
                             </tr>
-                        ))}
-                    </tbody>
-                </table>
+                        </thead>
+                        <tbody>
+                            {filteredOrders.map((order) => (
+                                <tr key={order.id}>
+                                    <td><span className="id-badge blue">{order.id}</span></td>
+                                    <td className="txt-bold">{order.customer}</td>
+                                    <td className="txt-gray">{new Date(order.createdAt).toLocaleDateString('vi-VN')}</td>
+                                    <td className="txt-bold color-primary">{formatPrice(order.totalAmount)}</td>
+                                    <td>
+                                        <span className={`badge-status ${order.status === 'Chờ xác nhận' ? 'pending' : order.status === 'Đã xác nhận' ? 'confirmed' : 'completed'}`}>
+                                            {order.status}
+                                        </span>
+                                    </td>
+                                    <td className="action-cell">
+                                        <div className="action-button-group">
+                                            <button className="btn-view-detail" onClick={() => {
+                                                setSelectedOrder(order);
+                                                setIsViewModalOpen(true);
+                                            }}>
+                                                <FiEye /> Chi tiết
+                                            </button>
+                                            <button className="btn-more-circle" onClick={() => setActiveMenuId(activeMenuId === order.id ? null : order.id)}>
+                                                <FiMoreVertical />
+                                            </button>
+                                            
+                                            {activeMenuId === order.id && (
+                                                <>
+                                                    <div className="menu-backdrop-transparent" onClick={() => setActiveMenuId(null)}></div>
+                                                    <div className="order-dropdown">
+                                                        <div className="dropdown-label">Cập nhật trạng thái</div>
+                                                        {order.status !== 'Đã xác nhận' && order.status !== 'Hoàn thành' && (
+                                                            <button onClick={() => handleUpdateStatus(order.id, 'Đã xác nhận')}>
+                                                                <FiCheckCircle className="txt-blue" /> Xác nhận đơn
+                                                            </button>
+                                                        )}
+                                                        {order.status !== 'Hoàn thành' && (
+                                                            <button onClick={() => handleUpdateStatus(order.id, 'Hoàn thành')}>
+                                                                <FiCheckCircle className="txt-green" /> Hoàn thành & Xuất kho
+                                                            </button>
+                                                        )}
+                                                        <div className="dropdown-divider"></div>
+                                                        <button className="txt-red" onClick={() => handleDeleteOrder(order.id)}>
+                                                            <FiTrash2 /> Xóa đơn hàng
+                                                        </button>
+                                                    </div>
+                                                </>
+                                            )}
+                                        </div>
+                                    </td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                )}
             </main>
 
-
-            {/* MODAL: TẠO ĐƠN HÀNG */}
+            {/* MODAL: TẠO ĐƠN HÀNG MỚI */}
             {isAddModalOpen && (
                 <div className="modal-overlay">
-                    <div className="modal-box medium-modal">
-                        <div className="modal-header-simple">
-                            <h2>Tạo đơn hàng sách mới</h2>
-                            <button className="btn-close-modal" onClick={() => setIsAddModalOpen(false)}>
-                                <FiX />
-                            </button>
+                    <div className="modal-box large">
+                        <div className="modal-top">
+                            <h2><FiPlusCircle /> Tạo đơn hàng mới</h2>
+                            <button onClick={() => setIsAddModalOpen(false)}><FiX /></button>
                         </div>
-                        <form onSubmit={(e) => handleSubmit(e, 'add')}>
-                            <div className="modal-body-simple">
-                                <div className="form-grid">
-                                    <div className="form-group-simple">
-                                        <label>Tên khách hàng</label>
-                                        <input type="text" placeholder="Nhập tên khách hàng" required />
-                                    </div>
-                                    <div className="form-group-simple">
-                                        <label>Số điện thoại</label>
-                                        <input type="text" placeholder="Nhập số điện thoại" required />
-                                    </div>
-                                    <div className="form-group-simple full-width">
-                                        <label>Địa chỉ nhận hàng</label>
-                                        <input type="text" placeholder="Số nhà, tên đường, quận/huyện..." required />
-                                    </div>
-                                    <div className="form-group-simple full-width">
-                                        <label>Ghi chú</label>
-                                        <textarea placeholder="Ghi chú về đơn hàng..."></textarea>
-                                    </div>
+                        <form onSubmit={handleAddSubmit} className="modal-form">
+                            <div className="form-grid">
+                                <div className="input-group">
+                                    <label><FiUser /> Tên khách hàng</label>
+                                    <input type="text" name="customer" placeholder="Nhập tên khách hàng..." required />
+                                </div>
+                                <div className="input-group">
+                                    <label><FiPhone /> Số điện thoại</label>
+                                    <input type="text" name="phone" placeholder="Số điện thoại liên hệ..." required />
+                                </div>
+                                <div className="input-group full-width">
+                                    <label><FiMapPin /> Địa chỉ giao hàng</label>
+                                    <input type="text" name="address" placeholder="Địa chỉ chi tiết..." required />
                                 </div>
                             </div>
-                            <div className="modal-footer-simple">
-                                <button type="button" className="btn-outline-simple" onClick={() => setIsAddModalOpen(false)}>Hủy</button>
-                                <button type="submit" className="btn-primary-simple">Tạo đơn hàng</button>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            )}
 
-            {/* MODAL: CHỈNH SỬA ĐƠN HÀNG */}
-            {isEditModalOpen && selectedOrder && (
-                <div className="modal-overlay">
-                    <div className="modal-box medium-modal">
-                        <div className="modal-header-simple">
-                            <h2>Chỉnh sửa đơn hàng {selectedOrder.id}</h2>
-                            <button className="btn-close-modal" onClick={() => setIsEditModalOpen(false)}>
-                                <FiX />
-                            </button>
-                        </div>
-                        <form onSubmit={(e) => handleSubmit(e, 'edit')}>
-                            <div className="modal-body-simple">
-                                <div className="form-grid">
-                                    <div className="form-group-simple">
-                                        <label>Tên khách hàng</label>
-                                        <input type="text" defaultValue={selectedOrder.customer} required />
-                                    </div>
-                                    <div className="form-group-simple">
-                                        <label>Trạng thái</label>
-                                        <div className="select-wrapper">
-                                            <select defaultValue={selectedOrder.status}>
-                                                <option value="Chờ xác nhận">Chờ xác nhận</option>
-                                                <option value="Đã xác nhận">Đã xác nhận</option>
-                                                <option value="Hoàn thành">Hoàn thành</option>
-                                            </select>
-                                            <FiChevronDown className="select-icon" />
-                                        </div>
-                                    </div>
-                                    <div className="form-group-simple full-width">
-                                        <label>Ghi chú</label>
-                                        <textarea defaultValue="Đơn hàng gấp"></textarea>
-                                    </div>
+                            <div className="order-items-section">
+                                <div className="section-header">
+                                    <h3><FiShoppingBag /> Danh sách mặt hàng</h3>
+                                    <button type="button" className="btn-add-item" onClick={addOrderItem}>
+                                        <FiPlusCircle /> Thêm sách
+                                    </button>
+                                </div>
+                                <div className="items-table-wrapper">
+                                    <table className="items-edit-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Sách</th>
+                                                <th>Số lượng</th>
+                                                <th>Thành tiền</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {orderItems.map((item, index) => (
+                                                <OrderItemRow 
+                                                    key={index}
+                                                    item={item}
+                                                    index={index}
+                                                    books={books}
+                                                    onUpdate={updateOrderItem}
+                                                    onRemove={removeOrderItem}
+                                                />
+                                            ))}
+                                        </tbody>
+                                    </table>
                                 </div>
                             </div>
-                            <div className="modal-footer-simple">
-                                <button type="button" className="btn-outline-simple" onClick={() => setIsEditModalOpen(false)}>Hủy</button>
-                                <button type="submit" className="btn-primary-simple">Lưu thay đổi</button>
+
+                            <div className="input-group" style={{ marginTop: '15px' }}>
+                                <label><FiFileText /> Ghi chú đơn hàng</label>
+                                <textarea name="note" rows="2" placeholder="Ghi chú thêm..."></textarea>
+                            </div>
+
+                            <div className="modal-btns">
+                                <div className="total-summary">
+                                    Tổng thanh toán: <span className="total-val">{totalAmountValue.toLocaleString()}đ</span>
+                                </div>
+                                <button type="button" className="btn-cancel" onClick={() => setIsAddModalOpen(false)}>Hủy bỏ</button>
+                                <button type="submit" className="btn-save bg-blue">Tạo đơn hàng</button>
                             </div>
                         </form>
                     </div>
@@ -355,132 +439,72 @@ const OrderManager = ({ setCurrentMenu }) => {
             {/* MODAL: CHI TIẾT ĐƠN HÀNG */}
             {isViewModalOpen && selectedOrder && (
                 <div className="modal-overlay">
-                    <div className="modal-box detail-modal-order">
-                        <div className="modal-header-simple">
-                            <div className="header-title-flex">
-                                <h2>Chi tiết đơn hàng {selectedOrder.id}</h2>
-                                <span className={`badge-status-detail ${selectedOrder.status === 'Chờ xác nhận' ? 'pending' : 'confirmed'}`}>
-                                    {selectedOrder.status}
-                                </span>
-                            </div>
-                            <button className="btn-close-modal" onClick={() => setIsViewModalOpen(false)}>
-                                <FiX />
-                            </button>
+                    <div className="modal-box large">
+                        <div className="modal-top">
+                            <h2>Chi tiết đơn hàng {selectedOrder.id}</h2>
+                            <button onClick={() => setIsViewModalOpen(false)}><FiX /></button>
                         </div>
-                        
-                        <div className="modal-body-detail-order">
-                            <div className="detail-section-group">
-                                <h3 className="section-title">Thông tin khách hàng</h3>
-                                <div className="detail-info-grid">
-                                    <div className="info-block">
-                                        <label>Tên khách hàng</label>
-                                        <div className="val">{selectedOrder.customer}</div>
-                                    </div>
-                                    <div className="info-block">
-                                        <label>Số điện thoại</label>
-                                        <div className="val">{selectedOrder.phone}</div>
-                                    </div>
-                                    <div className="info-block">
-                                        <label>Ngày đặt hàng</label>
-                                        <div className="val">{selectedOrder.date}</div>
-                                    </div>
-                                    <div className="info-block full-width">
-                                        <label>Địa chỉ nhận hàng</label>
-                                        <div className="val">{selectedOrder.address}</div>
-                                    </div>
+                        <div className="order-detail-content">
+                            <div className="detail-header-info">
+                                <div className="info-card">
+                                    <label><FiUser /> Khách hàng</label>
+                                    <p>{selectedOrder.customer}</p>
+                                </div>
+                                <div className="info-card">
+                                    <label><FiPhone /> Điện thoại</label>
+                                    <p>{selectedOrder.phone}</p>
+                                </div>
+                                <div className="info-card">
+                                    <label><FiMapPin /> Địa chỉ</label>
+                                    <p>{selectedOrder.address}</p>
+                                </div>
+                                <div className="info-card">
+                                    <label><FiFileText /> Trạng thái</label>
+                                    <span className={`badge-status ${selectedOrder.status === 'Chờ xác nhận' ? 'pending' : selectedOrder.status === 'Đã xác nhận' ? 'confirmed' : 'completed'}`}>
+                                        {selectedOrder.status}
+                                    </span>
                                 </div>
                             </div>
 
-                            <div className="detail-section-group">
-                                <h3 className="section-title">Danh sách sách đã đặt</h3>
-                                <div className="products-table-wrapper">
-                                    <table className="products-detail-table">
-                                        <thead>
-                                            <tr>
-                                                <th>Tên sách</th>
-                                                <th className="txt-center">Số lượng</th>
-                                                <th className="txt-right">Đơn giá</th>
-                                                <th className="txt-right">Thành tiền</th>
+                            <div className="detail-items-list">
+                                <h3>Sản phẩm đã đặt</h3>
+                                <table className="items-view-table">
+                                    <thead>
+                                        <tr>
+                                            <th>Sách</th>
+                                            <th>Số lượng</th>
+                                            <th>Đơn giá</th>
+                                            <th>Thành tiền</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {selectedOrder.OrderItems?.map((item, idx) => (
+                                            <tr key={idx}>
+                                                <td>{item.Book?.title || 'Sản phẩm không tên'}</td>
+                                                <td>{item.qty}</td>
+                                                <td>{formatPrice(item.price)}</td>
+                                                <td className="txt-bold">{formatPrice(item.total)}</td>
                                             </tr>
-                                        </thead>
-                                        <tbody>
-                                            {selectedOrder.products?.map((p, i) => (
-                                                <tr key={i}>
-                                                    <td className="product-name-cell">{p.name}</td>
-                                                    <td className="txt-center">{p.qty}</td>
-                                                    <td className="txt-right">{formatPrice(p.price)}</td>
-                                                    <td className="txt-right txt-bold">{formatPrice(p.total)}</td>
-                                                </tr>
-                                            ))}
-                                        </tbody>
-                                    </table>
-                                </div>
+                                        ))}
+                                    </tbody>
+                                    <tfoot>
+                                        <tr>
+                                            <td colSpan="3" className="txt-right">TỔNG CỘNG:</td>
+                                            <td className="txt-bold color-primary" style={{ fontSize: '18px' }}>{formatPrice(selectedOrder.totalAmount)}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
                             </div>
-
-                            <div className="detail-summary-container">
-                                <div className="summary-left">
-                                    <label>Ghi chú đơn hàng:</label>
-                                    <p>{selectedOrder.note || 'Không có ghi chú'}</p>
+                            
+                            {selectedOrder.note && (
+                                <div className="detail-note">
+                                    <label>Ghi chú:</label>
+                                    <p>{selectedOrder.note}</p>
                                 </div>
-                                <div className="summary-right">
-                                    <div className="sum-item">
-                                        <span>Tạm tính:</span>
-                                        <span>{formatPrice(selectedOrder.totalAmount)}</span>
-                                    </div>
-                                    <div className="sum-item">
-                                        <span>Phí vận chuyển:</span>
-                                        <span>0đ</span>
-                                    </div>
-                                    <div className="sum-total">
-                                        <span>Tổng thanh toán:</span>
-                                        <span className="total-amount-val">{formatPrice(selectedOrder.totalAmount)}</span>
-                                    </div>
-                                </div>
-                            </div>
+                            )}
                         </div>
-                        
-                        <div className="modal-footer-simple">
-                            <button className="btn-print-order"><FiRefreshCcw /> In hóa đơn</button>
-                            <button className="btn-close-large" onClick={() => setIsViewModalOpen(false)}>Đóng</button>
-                        </div>
-                    </div>
-                </div>
-            )}
-
-            <footer className="order-footer">
-                <div className="pagination-info">
-                    Hiển thị <strong>1</strong> đến <strong>{filteredOrders.length}</strong> trong tổng số <strong>{orders.length}</strong> mục
-                </div>
-                <div className="pagination-btns">
-                    <button className="btn-page"><FiChevronLeft /> Trước</button>
-                    <button className="btn-page active">1</button>
-                    <button className="btn-page">2</button>
-                    <button className="btn-page">Sau <FiChevronRight /></button>
-                </div>
-            </footer>
-            {/* Confirmation Modal */}
-            {confirmModal.isOpen && (
-                <div className="modal-overlay">
-                    <div className="modal-box confirm-modal">
-                        <div className="modal-body-confirm">
-                            <div className={`confirm-icon ${confirmModal.type === 'delete' ? 'bg-red-light' : 'bg-blue-light'}`}>
-                                {confirmModal.type === 'delete' ? <FiTrash2 className="txt-red" /> : <FiCheck className="txt-blue" />}
-                            </div>
-                            <h3>{confirmModal.type === 'delete' ? 'Xác nhận xóa đơn hàng' : 'Xác nhận đơn hàng'}</h3>
-                            <p>
-                                Bạn có chắc chắn muốn {confirmModal.type === 'delete' ? 'xóa' : 'xác nhận'} đơn hàng 
-                                <strong> {confirmModal.target?.id}</strong> không? 
-                                {confirmModal.type === 'delete' && ' Hành động này không thể hoàn tác.'}
-                            </p>
-                        </div>
-                        <div className="modal-footer-confirm">
-                            <button className="btn-outline-simple-cat" onClick={() => setConfirmModal({ isOpen: false, type: '', target: null })}>Hủy</button>
-                            <button 
-                                className={confirmModal.type === 'delete' ? 'btn-danger-confirm-cat' : 'btn-primary-confirm-cat'} 
-                                onClick={handleConfirmAction}
-                            >
-                                {confirmModal.type === 'delete' ? 'Xác nhận xóa' : 'Xác nhận ngay'}
-                            </button>
+                        <div className="modal-footer">
+                            <button className="btn-close-large" onClick={() => setIsViewModalOpen(false)}>Đóng lại</button>
                         </div>
                     </div>
                 </div>
