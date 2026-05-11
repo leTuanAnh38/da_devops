@@ -3,7 +3,7 @@ import cors from 'cors';
 import morgan from 'morgan';
 import { Sequelize, Op } from 'sequelize';
 import sequelize from './db.js';
-import { Category, Book, Order, OrderItem, StockCard } from './models.js';
+import { Category, Book, Order, OrderItem, StockCard, WarehouseReceipt, WarehouseReceiptItem } from './models.js';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -208,6 +208,89 @@ app.post('/api/inventory/adjust', async (req, res) => {
   } catch (error) {
     await t.rollback();
     res.status(400).json({ error: error.message });
+  }
+});
+
+// 6. WAREHOUSE RECEIPTS (NEW PROFESSIONAL SYSTEM)
+app.get('/api/warehouse/receipts', async (req, res) => {
+  try {
+    const receipts = await WarehouseReceipt.findAll({
+      include: [{ model: WarehouseReceiptItem, include: [Book] }],
+      order: [['createdAt', 'DESC']]
+    });
+    res.json(receipts);
+  } catch (error) {
+    console.error('LỖI GET RECEIPTS:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.post('/api/warehouse/receipts', async (req, res) => {
+  const t = await sequelize.transaction();
+  try {
+    const { id, type, partnerName, creatorName, items, note } = req.body;
+    
+    const receipt = await WarehouseReceipt.create({
+      id: id || `${type === 'NHAP' ? 'PN' : 'PX'}${Date.now()}`,
+      type,
+      partnerName,
+      creatorName,
+      note
+    }, { transaction: t });
+
+    let totalAmount = 0;
+    for (const item of items) {
+      const book = await Book.findByPk(item.bookId, { transaction: t });
+      if (!book) throw new Error(`Không tìm thấy sách mã ${item.bookId}`);
+
+      const itemTotal = item.quantity * (item.price || book.price);
+      totalAmount += itemTotal;
+
+      await WarehouseReceiptItem.create({
+        receiptId: receipt.id,
+        bookId: item.bookId,
+        quantity: item.quantity,
+        price: item.price || book.price,
+        total: itemTotal
+      }, { transaction: t });
+
+      const change = type === 'NHAP' ? item.quantity : -item.quantity;
+      if (type === 'XUAT' && book.quantity < item.quantity) {
+        throw new Error(`Sách ${book.title} không đủ tồn kho để xuất`);
+      }
+      
+      book.quantity += change;
+      await book.save({ transaction: t });
+
+      await StockCard.create({
+        bookId: book.id,
+        type: type,
+        change: change,
+        currentStock: book.quantity,
+        note: `Theo phiếu ${receipt.id}: ${note || ''}`
+      }, { transaction: t });
+    }
+
+    receipt.totalAmount = totalAmount;
+    await receipt.save({ transaction: t });
+
+    await t.commit();
+    res.status(201).json(receipt);
+  } catch (error) {
+    await t.rollback();
+    res.status(400).json({ error: error.message });
+  }
+});
+
+app.get('/api/warehouse/receipts/:id', async (req, res) => {
+  try {
+    const receipt = await WarehouseReceipt.findByPk(req.params.id, {
+      include: [{ model: WarehouseReceiptItem, include: [Book] }]
+    });
+    if (!receipt) return res.status(404).json({ error: 'Không tìm thấy phiếu' });
+    res.json(receipt);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

@@ -53,6 +53,24 @@ export const StockCard = sequelize.define('StockCard', {
   note: { type: DataTypes.STRING }
 });
 
+// 6. Model Phiếu Nhập/Xuất kho chuyên nghiệp
+export const WarehouseReceipt = sequelize.define('WarehouseReceipt', {
+  id: { type: DataTypes.STRING, primaryKey: true }, // PN001, PX001
+  type: { type: DataTypes.STRING, allowNull: false }, // NHAP, XUAT
+  partnerName: { type: DataTypes.STRING }, // Tên NCC hoặc Khách hàng
+  creatorName: { type: DataTypes.STRING }, // Tên nhân viên lập phiếu
+  totalAmount: { type: DataTypes.INTEGER, defaultValue: 0 },
+  status: { type: DataTypes.STRING, defaultValue: 'Hoàn thành' }, // Hoàn thành, Đã hủy
+  note: { type: DataTypes.TEXT }
+});
+
+// 7. Chi tiết phiếu nhập xuất
+export const WarehouseReceiptItem = sequelize.define('WarehouseReceiptItem', {
+  quantity: { type: DataTypes.INTEGER, allowNull: false },
+  price: { type: DataTypes.INTEGER, defaultValue: 0 },
+  total: { type: DataTypes.INTEGER, defaultValue: 0 }
+});
+
 // THIẾT LẬP QUAN HỆ (ASSOCIATIONS)
 Category.hasMany(Book, { foreignKey: 'categoryId' });
 Book.belongsTo(Category, { foreignKey: 'categoryId' });
@@ -66,4 +84,10 @@ OrderItem.belongsTo(Book, { foreignKey: 'bookId' });
 Book.hasMany(StockCard, { foreignKey: 'bookId' });
 StockCard.belongsTo(Book, { foreignKey: 'bookId' });
 
-export default { Category, Book, Order, OrderItem, StockCard };
+WarehouseReceipt.hasMany(WarehouseReceiptItem, { foreignKey: 'receiptId' });
+WarehouseReceiptItem.belongsTo(WarehouseReceipt, { foreignKey: 'receiptId' });
+
+Book.hasMany(WarehouseReceiptItem, { foreignKey: 'bookId' });
+WarehouseReceiptItem.belongsTo(Book, { foreignKey: 'bookId' });
+
+export default { Category, Book, Order, OrderItem, StockCard, WarehouseReceipt, WarehouseReceiptItem };

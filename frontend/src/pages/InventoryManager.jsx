@@ -1,11 +1,53 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import {
-    FiRotateCw, FiPlus, FiX, FiPackage, FiTruck, FiCornerUpLeft, FiAlertCircle, FiTrendingUp, FiTrendingDown, FiClock
+    FiRotateCw, FiPlus, FiX, FiPackage, FiTruck, FiCornerUpLeft, FiAlertCircle, FiTrendingUp, FiTrendingDown, FiClock, FiFileText, FiUser, FiPrinter, FiPlusCircle, FiTrash2, FiSearch
 } from 'react-icons/fi';
+import Swal from 'sweetalert2';
 import './InventoryManager.css';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
+
+// --- SUB-COMPONENT TỐI ƯU HÓA NHẬP LIỆU ---
+const ReceiptItemRow = React.memo(({ item, index, books, onUpdate, onRemove }) => {
+    return (
+        <tr>
+            <td style={{ width: '40%' }}>
+                <select 
+                    value={item.bookId} 
+                    onChange={(e) => onUpdate(index, 'bookId', e.target.value)}
+                    required
+                >
+                    <option value="">-- Chọn sách --</option>
+                    {books.map(b => (
+                        <option key={b.id} value={b.id}>{b.title} (Tồn: {b.quantity})</option>
+                    ))}
+                </select>
+            </td>
+            <td>
+                <input 
+                    type="number" 
+                    min="1" 
+                    value={item.quantity}
+                    onChange={(e) => onUpdate(index, 'quantity', parseInt(e.target.value) || 0)}
+                />
+            </td>
+            <td>
+                <input 
+                    type="number" 
+                    value={item.price}
+                    onChange={(e) => onUpdate(index, 'price', parseInt(e.target.value) || 0)}
+                />
+            </td>
+            <td className="txt-bold">{(item.quantity * item.price).toLocaleString()}đ</td>
+            <td>
+                <button type="button" className="btn-remove-item" onClick={() => onRemove(index)}>
+                    <FiTrash2 />
+                </button>
+            </td>
+        </tr>
+    );
+});
 
 const InventoryManager = () => {
     const [activeTab, setActiveTab] = useState('inventory'); // 'inventory', 'import', 'export'
@@ -15,8 +57,12 @@ const InventoryManager = () => {
     const [loading, setLoading] = useState(true);
     const [books, setBooks] = useState([]); // For selection in modals
 
-    const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-    const [isExportModalOpen, setIsExportModalOpen] = useState(false);
+    // PROFESSIONAL RECEIPT SYSTEM STATES
+    const [receipts, setReceipts] = useState([]);
+    const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
+    const [receiptType, setReceiptType] = useState('NHAP'); // 'NHAP' hoặc 'XUAT'
+    const [receiptItems, setReceiptItems] = useState([{ bookId: '', quantity: 1, price: 0 }]);
+    const [selectedReceipt, setSelectedReceipt] = useState(null); // Để xem chi tiết/in
 
     useEffect(() => {
         fetchData();
@@ -45,8 +91,18 @@ const InventoryManager = () => {
             } else if (activeTab === 'export') {
                 setHistoryData(fullHistory.filter(h => h.type === 'XUAT'));
             }
+
+            // Tải danh sách phiếu
+            const receiptsRes = await axios.get(`${API_URL}/warehouse/receipts`);
+            setReceipts(receiptsRes.data);
         } catch (err) {
             console.error("Lỗi fetch kho:", err);
+            Swal.fire({
+                icon: 'error',
+                title: 'Lỗi tải dữ liệu',
+                text: 'Không thể kết nối với máy chủ để lấy thông tin kho hàng.',
+                confirmButtonColor: '#EF4444'
+            });
         }
         setLoading(false);
     };
@@ -69,26 +125,101 @@ const InventoryManager = () => {
         return { totalStock, lowStockCount, totalImports, totalExports };
     }, [inventoryData, allHistory]);
 
-    const handleAdjustSubmit = async (e, type) => {
+
+    // --- LOGIC PHIẾU CHUYÊN NGHIỆP ---
+    const addReceiptItem = () => setReceiptItems([...receiptItems, { bookId: '', quantity: 1, price: 0 }]);
+    
+    const removeReceiptItem = React.useCallback((index) => {
+        setReceiptItems(prev => prev.filter((_, i) => i !== index));
+    }, []);
+
+    const updateReceiptItem = React.useCallback((index, field, value) => {
+        setReceiptItems(prev => {
+            const newItems = [...prev];
+            let updatedItem = { ...newItems[index], [field]: value };
+            
+            // TỰ ĐỘNG ĐIỀN GIÁ KHI CHỌN SÁCH
+            if (field === 'bookId' && value) {
+                const selectedBook = books.find(b => b.id === value);
+                if (selectedBook) {
+                    updatedItem.price = selectedBook.price;
+                }
+            }
+            
+            newItems[index] = updatedItem;
+            return newItems;
+        });
+    }, [books]);
+
+    const totalAmountValue = useMemo(() => {
+        return receiptItems.reduce((sum, i) => sum + (i.quantity * i.price), 0);
+    }, [receiptItems]);
+
+    const handleReceiptSubmit = async (e) => {
         e.preventDefault();
         const formData = new FormData(e.target);
-        const adjustment = {
-            bookId: formData.get('bookId'),
-            type: type,
-            quantity: parseInt(formData.get('quantity')),
-            note: formData.get('note')
+        const receiptData = {
+            type: receiptType,
+            partnerName: formData.get('partnerName'),
+            creatorName: formData.get('creatorName'),
+            note: formData.get('note'),
+            items: receiptItems.filter(item => item.bookId && item.quantity > 0)
         };
 
+        if (receiptData.items.length === 0) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Thiếu mặt hàng',
+                text: 'Vui lòng thêm ít nhất 1 sản phẩm vào phiếu',
+                confirmButtonColor: '#3B82F6'
+            });
+            return;
+        }
+
+        // KIỂM TRA TRÙNG LẶP SẢN PHẨM
+        const bookIds = receiptData.items.map(item => item.bookId);
+        const hasDuplicate = bookIds.some((id, index) => bookIds.indexOf(id) !== index);
+        if (hasDuplicate) {
+            Swal.fire({
+                icon: 'error',
+                title: 'Trùng lặp sản phẩm',
+                text: 'Trong phiếu có sản phẩm bị trùng lặp. Vui lòng gộp chung vào một dòng hoặc xóa bớt.',
+                confirmButtonColor: '#EF4444'
+            });
+            return;
+        }
+
         try {
-            await axios.post(`${API_URL}/inventory/adjust`, adjustment);
-            setActiveTab(type === 'NHAP' ? 'import' : 'export');
+            await axios.post(`${API_URL}/warehouse/receipts`, receiptData);
+            Swal.fire({
+                icon: 'success',
+                title: 'Thành công',
+                text: `Đã tạo phiếu ${receiptType === 'NHAP' ? 'nhập' : 'xuất'} kho thành công!`,
+                timer: 2000,
+                showConfirmButton: false
+            });
+            setIsReceiptModalOpen(false);
+            setReceiptItems([{ bookId: '', quantity: 1, price: 0 }]);
+            setActiveTab('receipts');
             fetchData();
-            setIsImportModalOpen(false);
-            setIsExportModalOpen(false);
         } catch (err) {
-            alert('Lỗi: ' + (err.response?.data?.error || err.message));
+            console.error('LỖI LẬP PHIẾU:', err);
+            Swal.fire({
+                icon: 'error',
+                title: 'Lỗi lập phiếu',
+                text: err.response?.data?.error || err.message,
+                confirmButtonColor: '#EF4444'
+            });
         }
     };
+
+    const openReceiptModal = (type) => {
+        setReceiptType(type);
+        setReceiptItems([{ bookId: '', quantity: 1, price: 0 }]);
+        setIsReceiptModalOpen(true);
+    };
+
+    const handlePrint = () => window.print();
 
     return (
         <div className="inventory-container">
@@ -101,11 +232,11 @@ const InventoryManager = () => {
                     <button className="btn-icon-square" onClick={fetchData} title="Làm mới">
                         <FiRotateCw />
                     </button>
-                    <button className="btn-import-action" onClick={() => setIsImportModalOpen(true)}>
-                        <FiPlus /> Tạo phiếu nhập
+                    <button className="btn-import-action" onClick={() => openReceiptModal('NHAP')}>
+                        <FiPlus /> Lập phiếu nhập
                     </button>
-                    <button className="btn-export-action" onClick={() => setIsExportModalOpen(true)}>
-                        <FiCornerUpLeft /> Tạo phiếu xuất
+                    <button className="btn-export-action" onClick={() => openReceiptModal('XUAT')}>
+                        <FiCornerUpLeft /> Lập phiếu xuất
                     </button>
                 </div>
             </header>
@@ -145,11 +276,14 @@ const InventoryManager = () => {
                 <button className={activeTab === 'inventory' ? 'active' : ''} onClick={() => setActiveTab('inventory')}>
                     <FiPackage /> Tồn kho hiện tại
                 </button>
+                <button className={activeTab === 'receipts' ? 'active' : ''} onClick={() => setActiveTab('receipts')}>
+                    <FiFileText /> Quản lý Chứng từ
+                </button>
                 <button className={activeTab === 'import' ? 'active' : ''} onClick={() => setActiveTab('import')}>
-                    <FiTruck /> Lịch sử nhập kho
+                    <FiTruck /> Thẻ kho (Nhập)
                 </button>
                 <button className={activeTab === 'export' ? 'active' : ''} onClick={() => setActiveTab('export')}>
-                    <FiCornerUpLeft /> Lịch sử xuất kho
+                    <FiCornerUpLeft /> Thẻ kho (Xuất)
                 </button>
             </div>
 
@@ -187,6 +321,46 @@ const InventoryManager = () => {
                             ))}
                         </tbody>
                     </table>
+                ) : activeTab === 'receipts' ? (
+                    <div className="receipts-list">
+                        <table className="inventory-table">
+                            <thead>
+                                <tr>
+                                    <th>Mã phiếu</th>
+                                    <th>Loại</th>
+                                    <th>Thời gian</th>
+                                    <th>Đối tác</th>
+                                    <th>Tổng tiền</th>
+                                    <th>Hành động</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {Array.isArray(receipts) && receipts.map(r => (
+                                    <tr key={r.id || Math.random()}>
+                                        <td><span className="id-badge blue">{r.id || 'N/A'}</span></td>
+                                        <td>
+                                            {r.type === 'NHAP' ? (
+                                                <span className="badge badge-success">Nhập kho</span>
+                                            ) : (
+                                                <span className="badge badge-danger">Xuất kho</span>
+                                            )}
+                                        </td>
+                                        <td>{r.createdAt ? new Date(r.createdAt).toLocaleString() : '---'}</td>
+                                        <td>{r.partnerName || 'Không xác định'}</td>
+                                        <td className="txt-bold">{(r.totalAmount || 0).toLocaleString()}đ</td>
+                                        <td>
+                                            <button className="btn-view-receipt" onClick={() => {
+                                                setSelectedReceipt(r);
+                                                setIsPrintModalOpen(true);
+                                            }}>
+                                                <FiPrinter /> Xem & In
+                                            </button>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                    </div>
                 ) : (
                     <table className="inventory-table">
                         <thead>
@@ -224,72 +398,159 @@ const InventoryManager = () => {
                 )}
             </main>
 
-            {/* MODAL NHẬP KHO */}
-            {isImportModalOpen && (
+            {/* MODAL LẬP PHIẾU CHUYÊN NGHIỆP (MỚI) */}
+            {isReceiptModalOpen && (
                 <div className="modal-overlay">
-                    <div className="modal-box">
+                    <div className="modal-box large">
                         <div className="modal-top">
-                            <h2><FiPlus /> Tạo phiếu nhập kho</h2>
-                            <button onClick={() => setIsImportModalOpen(false)}><FiX /></button>
+                            <h2>
+                                {receiptType === 'NHAP' ? <FiTruck /> : <FiCornerUpLeft />} 
+                                Lập phiếu {receiptType === 'NHAP' ? 'Nhập kho' : 'Xuất kho'} chuyên nghiệp
+                            </h2>
+                            <button onClick={() => setIsReceiptModalOpen(false)}><FiX /></button>
                         </div>
-                        <form onSubmit={(e) => handleAdjustSubmit(e, 'NHAP')} className="modal-form">
-                            <div className="input-group">
-                                <label>Sách nhập về</label>
-                                <select name="bookId" required>
-                                    <option value="">-- Chọn sách --</option>
-                                    {books.map(b => (
-                                        <option key={b.id} value={b.id}>{b.id} - {b.title}</option>
-                                    ))}
-                                </select>
+                        <form onSubmit={handleReceiptSubmit} className="modal-form">
+                            <div className="form-grid">
+                                <div className="input-group">
+                                    <label><FiUser /> {receiptType === 'NHAP' ? 'Nhà cung cấp' : 'Khách hàng / Bộ phận'}</label>
+                                    <input type="text" name="partnerName" placeholder="Nhập tên đối tác..." required />
+                                </div>
+                                <div className="input-group">
+                                    <label><FiUser /> Người lập phiếu</label>
+                                    <input type="text" name="creatorName" placeholder="Tên nhân viên..." required />
+                                </div>
                             </div>
-                            <div className="input-group">
-                                <label>Số lượng nhập thêm</label>
-                                <input type="number" name="quantity" min="1" required placeholder="Nhập số lượng..." />
+
+                            <div className="receipt-items-section">
+                                <div className="section-header">
+                                    <h3>Danh sách mặt hàng</h3>
+                                    <button type="button" className="btn-add-item" onClick={addReceiptItem}>
+                                        <FiPlusCircle /> Thêm dòng
+                                    </button>
+                                </div>
+                                <div className="items-table-wrapper">
+                                    <table className="items-edit-table">
+                                        <thead>
+                                            <tr>
+                                                <th>Sản phẩm</th>
+                                                <th>Số lượng</th>
+                                                <th>Đơn giá (nếu có)</th>
+                                                <th>Thành tiền</th>
+                                                <th></th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {receiptItems.map((item, index) => (
+                                                <ReceiptItemRow 
+                                                    key={index}
+                                                    item={item}
+                                                    index={index}
+                                                    books={books}
+                                                    onUpdate={updateReceiptItem}
+                                                    onRemove={removeReceiptItem}
+                                                />
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
                             </div>
-                            <div className="input-group">
-                                <label>Lý do nhập / Ghi chú</label>
-                                <textarea name="note" rows="3" placeholder="Ví dụ: Nhập hàng đợt tháng 5..."></textarea>
+
+                            <div className="input-group" style={{ marginTop: '15px' }}>
+                                <label>Ghi chú chung</label>
+                                <textarea name="note" rows="2" placeholder="Nội dung diễn giải..."></textarea>
                             </div>
+
                             <div className="modal-btns">
-                                <button type="button" className="btn-cancel" onClick={() => setIsImportModalOpen(false)}>Hủy bỏ</button>
-                                <button type="submit" className="btn-save bg-green">Xác nhận nhập kho</button>
+                                <div className="total-summary">
+                                    Tổng cộng: <span className="total-val">
+                                        {totalAmountValue.toLocaleString()}đ
+                                    </span>
+                                </div>
+                                <button type="button" className="btn-cancel" onClick={() => setIsReceiptModalOpen(false)}>Hủy bỏ</button>
+                                <button type="submit" className={`btn-save ${receiptType === 'NHAP' ? 'bg-green' : 'bg-red'}`}>
+                                    Xác nhận và Hoàn tất
+                                </button>
                             </div>
                         </form>
                     </div>
                 </div>
             )}
 
-            {/* MODAL XUẤT KHO */}
-            {isExportModalOpen && (
+            {/* MODAL XEM CHI TIẾT VÀ IN PHIẾU */}
+            {selectedReceipt && (
                 <div className="modal-overlay">
-                    <div className="modal-box">
-                        <div className="modal-top">
-                            <h2><FiCornerUpLeft /> Tạo phiếu xuất kho</h2>
-                            <button onClick={() => setIsExportModalOpen(false)}><FiX /></button>
+                    <div className="modal-box large receipt-print-modal">
+                        <div className="modal-top no-print">
+                            <h2>Chi tiết phiếu kho</h2>
+                            <div className="top-actions">
+                                <button className="btn-print" onClick={handlePrint}><FiPrinter /> In phiếu</button>
+                                <button onClick={() => setSelectedReceipt(null)}><FiX /></button>
+                            </div>
                         </div>
-                        <form onSubmit={(e) => handleAdjustSubmit(e, 'XUAT')} className="modal-form">
-                            <div className="input-group">
-                                <label>Sách xuất đi</label>
-                                <select name="bookId" required>
-                                    <option value="">-- Chọn sách --</option>
-                                    {books.map(b => (
-                                        <option key={b.id} value={b.id}>{b.id} - {b.title} (Hiện có: {b.quantity})</option>
+                        <div className="receipt-print-area" id="print-area">
+                            <div className="print-header">
+                                <div className="company-info">
+                                    <h3>HỆ THỐNG QUẢN LÝ KHO SÁCH</h3>
+                                    <p>Địa chỉ: 123 Đường Sách, TP. Hồ Chí Minh</p>
+                                    <p>Điện thoại: 0123 456 789</p>
+                                </div>
+                                <div className="receipt-title">
+                                    <h1>PHIẾU {selectedReceipt.type === 'NHAP' ? 'NHẬP' : 'XUẤT'} KHO</h1>
+                                    <p>Mã số: <strong>{selectedReceipt.id}</strong></p>
+                                    <p>Ngày lập: {selectedReceipt.createdAt ? new Date(selectedReceipt.createdAt).toLocaleDateString('vi-VN') : '---'}</p>
+                                </div>
+                            </div>
+                            
+                            <div className="print-info">
+                                <p><strong>Đối tác:</strong> {selectedReceipt.partnerName || '---'}</p>
+                                <p><strong>Người lập:</strong> {selectedReceipt.creatorName || '---'}</p>
+                                <p><strong>Ghi chú:</strong> {selectedReceipt.note || '---'}</p>
+                            </div>
+
+                            <table className="print-table">
+                                <thead>
+                                    <tr>
+                                        <th>STT</th>
+                                        <th>Tên sản phẩm</th>
+                                        <th>Số lượng</th>
+                                        <th>Đơn giá</th>
+                                        <th>Thành tiền</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {Array.isArray(selectedReceipt.WarehouseReceiptItems) && selectedReceipt.WarehouseReceiptItems.map((item, idx) => (
+                                        <tr key={idx}>
+                                            <td>{idx + 1}</td>
+                                            <td>{item.Book?.title || 'Sản phẩm không tồn tại'}</td>
+                                            <td>{item.quantity || 0}</td>
+                                            <td>{(item.price || 0).toLocaleString()}đ</td>
+                                            <td>{(item.total || 0).toLocaleString()}đ</td>
+                                        </tr>
                                     ))}
-                                </select>
+                                </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <td colSpan="4" style={{ textAlign: 'right', fontWeight: 'bold' }}>TỔNG CỘNG:</td>
+                                        <td className="txt-bold">{(selectedReceipt.totalAmount || 0).toLocaleString()}đ</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+
+                            <div className="print-footer">
+                                <div className="sign-box">
+                                    <p>Người lập phiếu</p>
+                                    <span>(Ký và ghi rõ họ tên)</span>
+                                </div>
+                                <div className="sign-box">
+                                    <p>Thủ kho</p>
+                                    <span>(Ký và ghi rõ họ tên)</span>
+                                </div>
+                                <div className="sign-box">
+                                    <p>Đối tác</p>
+                                    <span>(Ký và ghi rõ họ tên)</span>
+                                </div>
                             </div>
-                            <div className="input-group">
-                                <label>Số lượng xuất</label>
-                                <input type="number" name="quantity" min="1" required placeholder="Nhập số lượng..." />
-                            </div>
-                            <div className="input-group">
-                                <label>Lý do xuất kho</label>
-                                <textarea name="note" rows="3" placeholder="Ví dụ: Xuất hàng lỗi, Trả hàng nhà cung cấp..."></textarea>
-                            </div>
-                            <div className="modal-btns">
-                                <button type="button" className="btn-cancel" onClick={() => setIsExportModalOpen(false)}>Hủy bỏ</button>
-                                <button type="submit" className="btn-save bg-red">Xác nhận xuất kho</button>
-                            </div>
-                        </form>
+                        </div>
                     </div>
                 </div>
             )}

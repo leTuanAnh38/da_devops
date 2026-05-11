@@ -3,7 +3,7 @@ import { Category, Book, Order, OrderItem, StockCard } from './models.js';
 
 const seed = async () => {
   try {
-    await sequelize.sync({ force: true });
+    await sequelize.sync({ alter: true });
     console.log('Database cleared and synced.');
 
     // 1. Seed Categories

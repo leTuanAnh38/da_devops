@@ -5,6 +5,7 @@ import {
     FiBell, FiChevronLeft, FiChevronRight, FiX,
     FiCopy, FiLayers, FiEye, FiEdit2, FiTrash2, FiCheckCircle, FiChevronDown
 } from 'react-icons/fi';
+import Swal from 'sweetalert2';
 import './BookInventory.css';
 
 const BookInventory = ({ setCurrentMenu }) => {
@@ -16,8 +17,6 @@ const BookInventory = ({ setCurrentMenu }) => {
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
     const [isViewModalOpen, setIsViewModalOpen] = useState(false);
-    const [isAdjustModalOpen, setIsAdjustModalOpen] = useState(false);
-    const [adjustType, setAdjustType] = useState('NHAP'); // 'NHAP' hoặc 'XUAT'
     
     // State cho Menu 3 chấm
     const [currentBook, setCurrentBook] = useState(null);
@@ -202,42 +201,39 @@ const BookInventory = ({ setCurrentMenu }) => {
     const openDeleteModal = (book) => { setCurrentBook(book); setIsDeleteModalOpen(true); closeMenu(); };
     
     const handleConfirmDelete = async () => {
+        if (!currentBook) return;
+
+        // KIỂM TRA TỒN KHO TRƯỚC KHI XÓA
+        if (currentBook.quantity > 0) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Không thể xóa!',
+                text: `Sách "${currentBook.title}" vẫn còn ${currentBook.quantity} cuốn trong kho. Bạn cần lập phiếu xuất kho hết trước khi xóa mặt hàng này.`,
+                confirmButtonColor: '#3085d6'
+            });
+            setIsDeleteModalOpen(false);
+            return;
+        }
+
         try {
             const encodedId = encodeURIComponent(currentBook.id);
             await axios.delete(`${API_URL}/books/${encodedId}`);
+            Swal.fire({
+                icon: 'success',
+                title: 'Đã xóa',
+                text: 'Sách đã được xóa khỏi danh sách thành công.',
+                timer: 2000,
+                showConfirmButton: false
+            });
             fetchBooks();
             setIsDeleteModalOpen(false);
-            showToast('Xóa sách thành công!', 'success');
             setCurrentBook(null);
         } catch (err) {
-            showToast('Lỗi khi xóa sách', 'error');
-        }
-    };
-
-    const openAdjustModal = (book, type) => {
-        setCurrentBook(book);
-        setAdjustType(type);
-        setIsAdjustModalOpen(true);
-        setActiveMenuId(null);
-    };
-
-    const handleAdjustSubmit = async (e) => {
-        e.preventDefault();
-        const formData = new FormData(e.target);
-        const adjustment = {
-            bookId: currentBook.id,
-            type: adjustType,
-            quantity: parseInt(formData.get('quantity')),
-            note: formData.get('note')
-        };
-
-        try {
-            await axios.post(`${API_URL}/inventory/adjust`, adjustment);
-            fetchBooks();
-            setIsAdjustModalOpen(false);
-            showToast(`${adjustType === 'NHAP' ? 'Nhập' : 'Xuất'} kho thành công!`, 'success');
-        } catch (err) {
-            showToast('Lỗi: ' + (err.response?.data?.error || err.message), 'error');
+            Swal.fire({
+                icon: 'error',
+                title: 'Lỗi',
+                text: err.response?.data?.error || err.message
+            });
         }
     };
 
@@ -372,7 +368,7 @@ const BookInventory = ({ setCurrentMenu }) => {
                                             </button>
                                             
                                             {activeMenuId === book.id && (
-                                                <div className="dropdown-menu">
+                                                <div className={`dropdown-menu ${currentBooks.indexOf(book) >= 3 ? 'menu-up' : ''}`}>
                                                     <div className="dropdown-group-title">Thao tác nhanh</div>
                                                     <button className="dropdown-item" onClick={() => handleCopyId(book.id)}>
                                                         <FiCopy /> Sao chép mã <span className="shortcut">Ctrl+C</span>
@@ -387,14 +383,6 @@ const BookInventory = ({ setCurrentMenu }) => {
                                                     </button>
                                                     <button className="dropdown-item text-danger" onClick={() => openDeleteModal(book)}>
                                                         <FiTrash2 /> Xóa <span className="shortcut">Del</span>
-                                                    </button>
-                                                    <div className="dropdown-divider"></div>
-                                                    <div className="dropdown-group-title">Kho hàng</div>
-                                                    <button className="dropdown-item" onClick={() => openAdjustModal(book, 'NHAP')}>
-                                                        <FiPlus style={{ color: '#10B981' }} /> Nhập kho nhanh
-                                                    </button>
-                                                    <button className="dropdown-item" onClick={() => openAdjustModal(book, 'XUAT')}>
-                                                        <FiTrash2 style={{ color: '#EF4444' }} /> Xuất kho nhanh
                                                     </button>
                                                     <div className="dropdown-divider"></div>
                                                     <button className="dropdown-item" onClick={closeMenu}><FiX /> Đóng menu <span className="shortcut">Esc</span></button>
@@ -623,37 +611,6 @@ const BookInventory = ({ setCurrentMenu }) => {
                             <button className="btn-outline-simple-cat" onClick={() => setIsDeleteModalOpen(false)}>Hủy</button>
                             <button className="btn-danger-confirm-cat" onClick={handleConfirmDelete}>Xác nhận xóa</button>
                         </div>
-                    </div>
-                </div>
-            )}
-            {/* MODAL ĐIỀU CHỈNH KHO (NHẬP/XUẤT) */}
-            {isAdjustModalOpen && currentBook && (
-                <div className="modal-overlay">
-                    <div className="modal-content" style={{ maxWidth: '400px' }}>
-                        <div className="modal-header">
-                            <h2>{adjustType === 'NHAP' ? 'Nhập kho sách' : 'Xuất kho sách'}</h2>
-                            <button type="button" className="btn-close" onClick={() => setIsAdjustModalOpen(false)}><FiX /></button>
-                        </div>
-                        <form className="modal-body" onSubmit={handleAdjustSubmit}>
-                            <div style={{ marginBottom: '15px', padding: '10px', backgroundColor: '#F3F4F6', borderRadius: '6px' }}>
-                                <p style={{ margin: 0, fontSize: '13px', color: '#6B7280' }}>Sách: <strong>{currentBook.title}</strong></p>
-                                <p style={{ margin: '4px 0 0', fontSize: '13px', color: '#6B7280' }}>Tồn hiện tại: <strong>{currentBook.quantity}</strong></p>
-                            </div>
-                            <div className="form-group">
-                                <label>Số lượng {adjustType === 'NHAP' ? 'nhập thêm' : 'xuất đi'}</label>
-                                <input type="number" name="quantity" min="1" placeholder="Nhập số lượng..." required />
-                            </div>
-                            <div className="form-group">
-                                <label>Ghi chú / Lý do</label>
-                                <textarea name="note" placeholder="Ví dụ: Nhập hàng mới về, Hàng lỗi..." rows="2"></textarea>
-                            </div>
-                            <div className="modal-footer">
-                                <button type="button" className="btn-cancel" onClick={() => setIsAdjustModalOpen(false)}>Hủy</button>
-                                <button type="submit" className="btn-submit" style={{ backgroundColor: adjustType === 'NHAP' ? '#10B981' : '#EF4444', color: 'white' }}>
-                                    Xác nhận {adjustType === 'NHAP' ? 'nhập' : 'xuất'}
-                                </button>
-                            </div>
-                        </form>
                     </div>
                 </div>
             )}

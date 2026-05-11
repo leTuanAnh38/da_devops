@@ -6,8 +6,7 @@
     padding: 24px 32px;
     background-color: #ffffff;
     color: #333;
-    /* Giả lập phần khung bên phải của thiết kế */
-    /*margin-left: 240px; /* Chừa chỗ cho Sidebar nếu bạn lắp vào sau */
+    overflow: visible !important; /* Đảm bảo không bị che ở mức ngoài cùng */
 }
 
 /* --- HEADER --- */
@@ -144,14 +143,20 @@
 .table-wrapper {
     border: 1px solid #F3F4F6;
     border-radius: 8px;
-    overflow: hidden;
+    overflow: visible !important; /* Ép hiển thị tràn khung */
+    position: relative;
+}
+
+.inventory-main {
     overflow: visible !important;
 }
 
 .inventory-table {
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate; /* Tách biệt để z-index hoạt động tốt hơn */
+    border-spacing: 0;
     text-align: left;
+    overflow: visible !important;
 }
 
 
@@ -462,16 +467,30 @@
 
 .dropdown-menu {
     position: absolute;
-    right: 40px; /* Đẩy lùi vào để không bị tràn màn hình */
-    top: 10px;
+    right: calc(100% + 10px); /* Đẩy sang trái của nút 3 chấm */
+    top: 50%;
+    transform: translateY(-50%); /* Luôn căn giữa dọc */
     background-color: #ffffff;
     border: 1px solid #E5E7EB;
-    border-radius: 8px;
-    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.15); /* Làm bóng đậm hơn chút để nổi hẳn lên */
-    width: 220px;
-    padding: 8px 0;
-    z-index: 999; /* Đảm bảo luôn nằm trên cùng */
-    animation: fadeIn 0.15s ease-out;
+    border-radius: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.25);
+    width: 230px;
+    padding: 10px 0;
+    z-index: 9999 !important; /* Ưu tiên cao nhất */
+    animation: menuScaleIn 0.15s ease-out;
+    pointer-events: auto;
+}
+
+@keyframes menuScaleIn {
+    from { opacity: 0; transform: translateY(-50%) scale(0.95); }
+    to { opacity: 1; transform: translateY(-50%) scale(1); }
+}
+
+/* Đồng bộ hóa hoàn toàn: Xóa bỏ các class nhảy lên nhảy xuống không cần thiết */
+.dropdown-menu.menu-up {
+    top: 50% !important;
+    bottom: auto !important;
+    transform: translateY(-50%) !important;
 }
 
 @keyframes fadeIn {
