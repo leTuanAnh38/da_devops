@@ -24,6 +24,8 @@ cd backend
 npm install
 ```
 
+**Health Check Endpoint:** `GET /api/health` (Dùng để kiểm tra trạng thái hệ thống khi deploy).
+
 Tạo file `.env` trong thư mục `backend` với nội dung sau:
 ```env
 PORT=5000

@@ -14,6 +14,15 @@ const PORT = process.env.PORT || 5000;
 
 app.use(cors());
 app.use(express.json());
+
+// 0. HEALTH CHECK (MANDATORY FOR DEPLOYMENT)
+app.get('/api/health', (req, res) => {
+  res.status(200).json({ 
+    status: 'UP', 
+    timestamp: new Date(),
+    service: 'Backend API'
+  });
+});
 app.use(morgan('dev'));
 
 // 1. Health check
