@@ -32,12 +32,17 @@ const BookInventory = ({ setCurrentMenu }) => {
     const [filters, setFilters] = useState({ category: '', status: '', minPrice: '', maxPrice: '' });
     
     const [currentPage, setCurrentPage] = useState(1);
-    const itemsPerPage = 5;
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalItems, setTotalItems] = useState(0);
+    const itemsPerPage = 10;
 
     const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
     useEffect(() => {
         fetchBooks();
+    }, [currentPage, searchQuery, filters]); // Tải lại khi trang hoặc bộ lọc thay đổi
+
+    useEffect(() => {
         fetchCategories();
     }, []);
 
@@ -51,53 +56,25 @@ const BookInventory = ({ setCurrentMenu }) => {
     };
 
     const fetchBooks = async () => {
+        setLoading(true);
         try {
-            const res = await axios.get(`${API_URL}/books`);
-            setBooks(res.data);
+            const params = {
+                page: currentPage,
+                limit: itemsPerPage,
+                search: searchQuery,
+                categoryId: filters.category,
+                status: filters.status
+            };
+            const res = await axios.get(`${API_URL}/books`, { params });
+            setBooks(res.data.books || []);
+            setTotalPages(res.data.totalPages || 1);
+            setTotalItems(res.data.total || 0);
             setLoading(false);
         } catch (err) {
             console.error("Lỗi khi tải sách:", err);
             setLoading(false);
         }
     };
-
-    // {
-    // "id": "#001",            // Hoặc _id của MongoDB
-    // "title": "Clean Code",     // String: Tên sách
-    // "category": "CNTT",        // String: Thể loại (CNTT, Kinh doanh, Văn học...)
-    // "price": 250000,           // Number: Giá tiền (số nguyên)
-    // "quantity": 40,            // Number: Số lượng tồn kho
-    // "unit": "Cuốn",            // String: Đơn vị (Cuốn, Bộ)
-    // "status": "Còn hàng"       // String: Trạng thái (Còn hàng, Sắp hết)
-    // }
-
-    // LOGIC LỌC TỔNG HỢP
-    const filteredBooks = useMemo(() => {
-        return books.filter(book => {
-            const matchesSearch = 
-                book.title.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                book.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                (book.Category?.name || "").toLowerCase().includes(searchQuery.toLowerCase());
-            
-            const matchesCategory = filters.category === '' || book.categoryId === filters.category;
-            const matchesStatus = filters.status === '' || book.status === filters.status;
-            const matchesMinPrice = filters.minPrice === '' || book.price >= parseInt(filters.minPrice);
-            const matchesMaxPrice = filters.maxPrice === '' || book.price <= parseInt(filters.maxPrice);
-
-            return matchesSearch && matchesCategory && matchesStatus && matchesMinPrice && matchesMaxPrice;
-        });
-    }, [books, searchQuery, filters]);
-
-    useEffect(() => {
-        setCurrentPage(1);
-    }, [searchQuery, filters]);
-
-    const totalPages = Math.ceil(filteredBooks.length / itemsPerPage) || 1;
-    
-    const currentBooks = useMemo(() => {
-        const startIndex = (currentPage - 1) * itemsPerPage;
-        return filteredBooks.slice(startIndex, startIndex + itemsPerPage);
-    }, [filteredBooks, currentPage]);
 
     const formatPrice = (price) => new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(price);
     
@@ -114,12 +91,14 @@ const BookInventory = ({ setCurrentMenu }) => {
     const closeMenu = () => setActiveMenuId(null);
 
     const handleRefresh = () => {
-        setLoading(true);
-        setTimeout(() => { setLoading(false); showToast('Đã làm mới dữ liệu!', 'success'); }, 600);
+        fetchBooks();
+        showToast('Đã làm mới dữ liệu!', 'success');
     };
 
     const clearFilters = () => {
         setFilters({ category: '', status: '', minPrice: '', maxPrice: '' });
+        setSearchQuery('');
+        setCurrentPage(1);
         showToast('Đã xóa bộ lọc', 'success');
     };
 
@@ -349,7 +328,7 @@ const BookInventory = ({ setCurrentMenu }) => {
                                 </tr>
                             </thead>
                             <tbody>
-                                {currentBooks.length > 0 ? currentBooks.map((book) => (
+                                {books.length > 0 ? books.map((book) => (
                                     <tr key={book.id} className={activeMenuId === book.id ? 'active-row' : ''}>
                                         <td>{book.id}</td>
                                         <td className="book-title">{book.title}</td>
@@ -368,7 +347,7 @@ const BookInventory = ({ setCurrentMenu }) => {
                                             </button>
                                             
                                             {activeMenuId === book.id && (
-                                                <div className={`dropdown-menu ${currentBooks.indexOf(book) >= 3 ? 'menu-up' : ''}`}>
+                                                <div className={`dropdown-menu ${books.indexOf(book) >= 3 ? 'menu-up' : ''}`}>
                                                     <div className="dropdown-group-title">Thao tác nhanh</div>
                                                     <button className="dropdown-item" onClick={() => handleCopyId(book.id)}>
                                                         <FiCopy /> Sao chép mã <span className="shortcut">Ctrl+C</span>
@@ -403,7 +382,7 @@ const BookInventory = ({ setCurrentMenu }) => {
 
             <footer className="inventory-footer">
                 <p className="pagination-info">
-                    Hiển thị {currentBooks.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} đến {Math.min(currentPage * itemsPerPage, filteredBooks.length)} trong tổng số {filteredBooks.length} mục
+                    Hiển thị {books.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} đến {Math.min(currentPage * itemsPerPage, totalItems)} trong tổng số {totalItems} mục
                 </p>
                 <div className="pagination-controls">
                     <button className="btn-page" onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>

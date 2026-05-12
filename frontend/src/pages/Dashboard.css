@@ -52,10 +52,10 @@
     font-size: 24px;
 }
 
-.bg-blue { background-color: #E0F2FE; color: #0284C7; }
-.bg-green { background-color: #DCFCE7; color: #16A34A; }
-.bg-red { background-color: #FEE2E2; color: #DC2626; }
-.bg-yellow { background-color: #FEF9C3; color: #CA8A04; }
+.dash-bg-blue { background-color: #E0F2FE; color: #0284C7; }
+.dash-bg-green { background-color: #DCFCE7; color: #16A34A; }
+.dash-bg-red { background-color: #FEE2E2; color: #DC2626; }
+.dash-bg-yellow { background-color: #FEF9C3; color: #CA8A04; }
 
 .stat-info p {
     margin: 0;
@@ -81,6 +81,13 @@
 .dashboard-content {
     display: grid;
     grid-template-columns: 2fr 1fr;
+    gap: 20px;
+    align-items: start;
+}
+
+.charts-wrapper-main {
+    display: flex;
+    flex-direction: column;
     gap: 20px;
 }
 

@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react';
 import axios from 'axios';
 import { FiTrendingUp, FiBox, FiAlertCircle, FiDollarSign, FiClock, FiCornerUpLeft, FiArrowUp } from 'react-icons/fi';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { 
+    BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+    AreaChart, Area
+} from 'recharts';
 import './Dashboard.css';
 
 const Dashboard = ({ setCurrentMenu }) => {
@@ -28,7 +31,7 @@ const Dashboard = ({ setCurrentMenu }) => {
                 setStats({
                     totalCategories: data.totalCategories,
                     totalBooks: data.totalBooks,
-                    lowStock: data.recentActivities.filter(a => a.type === 'XUAT' && a.change < -50).length || 0, // Logic giả lập
+                    lowStock: data.lowStockCount || 0,
                     totalRevenue: data.totalRevenue
                 });
                 
@@ -68,28 +71,28 @@ const Dashboard = ({ setCurrentMenu }) => {
 
             <div className="stats-grid">
                 <div className="stat-card">
-                    <div className="stat-icon bg-blue"><FiBox /></div>
+                    <div className="stat-icon dash-bg-blue"><FiBox /></div>
                     <div className="stat-info">
                         <p>Tổng loại sách</p>
                         <h3>{stats.totalCategories}</h3>
                     </div>
                 </div>
                 <div className="stat-card">
-                    <div className="stat-icon bg-green"><FiTrendingUp /></div>
+                    <div className="stat-icon dash-bg-green"><FiTrendingUp /></div>
                     <div className="stat-info">
                         <p>Tổng sách tồn kho</p>
                         <h3>{stats.totalBooks.toLocaleString()} <span>cuốn</span></h3>
                     </div>
                 </div>
                 <div className="stat-card">
-                    <div className="stat-icon bg-red"><FiAlertCircle /></div>
+                    <div className="stat-icon dash-bg-red"><FiAlertCircle /></div>
                     <div className="stat-info">
                         <p>Sách sắp hết hàng</p>
                         <h3>{stats.lowStock} <span>đầu sách</span></h3>
                     </div>
                 </div>
                 <div className="stat-card">
-                    <div className="stat-icon bg-yellow"><FiDollarSign /></div>
+                    <div className="stat-icon dash-bg-yellow"><FiDollarSign /></div>
                     <div className="stat-info">
                         <p>Tổng doanh thu</p>
                         <h3 style={{ fontSize: '18px' }}>{formatCurrency(stats.totalRevenue)}</h3>
@@ -98,20 +101,46 @@ const Dashboard = ({ setCurrentMenu }) => {
             </div>
 
             <div className="dashboard-content">
-                <div className="chart-section">
-                    <h3>Thống kê Nhập / Xuất (6 tháng)</h3>
-                    <div className="chart-wrapper">
-                        <ResponsiveContainer width="100%" height="100%">
-                            <BarChart data={monthlyData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-                                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
-                                <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6B7280'}} />
-                                <YAxis axisLine={false} tickLine={false} tick={{fill: '#6B7280'}} />
-                                <Tooltip cursor={{fill: '#F3F4F6'}} />
-                                <Legend wrapperStyle={{ paddingTop: '20px' }}/>
-                                <Bar dataKey="nhap" name="Nhập kho" fill="#4F46E5" radius={[4, 4, 0, 0]} barSize={32} />
-                                <Bar dataKey="xuat" name="Xuất kho" fill="#EF4444" radius={[4, 4, 0, 0]} barSize={32} />
-                            </BarChart>
-                        </ResponsiveContainer>
+                <div className="charts-wrapper-main">
+                    <div className="chart-section">
+                        <h3>Thống kê Nhập / Xuất (6 tháng)</h3>
+                        <div className="chart-wrapper">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <BarChart data={monthlyData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6B7280'}} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#6B7280'}} />
+                                    <Tooltip cursor={{fill: '#F3F4F6'}} />
+                                    <Legend wrapperStyle={{ paddingTop: '20px' }}/>
+                                    <Bar dataKey="nhap" name="Nhập kho" fill="#4F46E5" radius={[4, 4, 0, 0]} barSize={32} />
+                                    <Bar dataKey="xuat" name="Xuất kho" fill="#EF4444" radius={[4, 4, 0, 0]} barSize={32} />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </div>
+                    </div>
+
+                    <div className="chart-section" style={{ marginTop: '20px' }}>
+                        <h3>Thống kê Doanh thu (6 tháng)</h3>
+                        <div className="chart-wrapper">
+                            <ResponsiveContainer width="100%" height="100%">
+                                <AreaChart data={monthlyData} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
+                                    <defs>
+                                        <linearGradient id="colorRevenue" x1="0" y1="0" x2="0" y2="1">
+                                            <stop offset="5%" stopColor="#10B981" stopOpacity={0.1}/>
+                                            <stop offset="95%" stopColor="#10B981" stopOpacity={0}/>
+                                        </linearGradient>
+                                    </defs>
+                                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#E5E7EB" />
+                                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#6B7280'}} />
+                                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#6B7280'}} tickFormatter={(value) => `${(value/1000).toLocaleString()}k`} />
+                                    <Tooltip 
+                                        formatter={(value) => [new Intl.NumberFormat('vi-VN').format(value) + 'đ', 'Doanh thu']}
+                                        contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 12px rgba(0,0,0,0.1)' }}
+                                    />
+                                    <Area type="monotone" dataKey="doanhthu" name="Doanh thu" stroke="#10B981" fillOpacity={1} fill="url(#colorRevenue)" strokeWidth={3} />
+                                </AreaChart>
+                            </ResponsiveContainer>
+                        </div>
                     </div>
                 </div>
 

@@ -82,6 +82,16 @@ export const Notification = sequelize.define('Notification', {
   isRead: { type: DataTypes.BOOLEAN, defaultValue: false }
 });
 
+// 9. Model Người dùng (Xác thực)
+export const User = sequelize.define('User', {
+  id: { type: DataTypes.INTEGER, primaryKey: true, autoIncrement: true },
+  username: { type: DataTypes.STRING, unique: true, allowNull: false },
+  password: { type: DataTypes.STRING, allowNull: false },
+  fullName: { type: DataTypes.STRING },
+  role: { type: DataTypes.ENUM('admin', 'staff'), defaultValue: 'staff' },
+  avatar: { type: DataTypes.STRING }
+});
+
 // THIẾT LẬP QUAN HỆ (ASSOCIATIONS)
 Category.hasMany(Book, { foreignKey: 'categoryId' });
 Book.belongsTo(Category, { foreignKey: 'categoryId' });
@@ -101,4 +111,4 @@ WarehouseReceiptItem.belongsTo(WarehouseReceipt, { foreignKey: 'receiptId' });
 Book.hasMany(WarehouseReceiptItem, { foreignKey: 'bookId' });
 WarehouseReceiptItem.belongsTo(Book, { foreignKey: 'bookId' });
 
-export default { Category, Book, Order, OrderItem, StockCard, WarehouseReceipt, WarehouseReceiptItem };
+export default { Category, Book, Order, OrderItem, StockCard, WarehouseReceipt, WarehouseReceiptItem, User };

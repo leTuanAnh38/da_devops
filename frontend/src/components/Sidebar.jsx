@@ -2,7 +2,7 @@ import React from 'react';
 import { FiGrid, FiBox, FiFolder, FiArchive, FiLogOut, FiShoppingCart, FiBell } from 'react-icons/fi';
 import './Sidebar.css';
 
-const Sidebar = ({ currentMenu, setCurrentMenu, unreadCount }) => {
+const Sidebar = ({ currentMenu, setCurrentMenu, unreadCount, user, onLogout }) => {
     return (
         <aside className="sidebar-container">
             <div className="sidebar-logo">
@@ -106,13 +106,13 @@ const Sidebar = ({ currentMenu, setCurrentMenu, unreadCount }) => {
 
             <div className="sidebar-footer">
                 <div className="admin-profile-sidebar">
-                    <div className="avatar">A</div>
+                    <div className="avatar">{(user?.fullName || user?.username || 'A')[0].toUpperCase()}</div>
                     <div className="admin-info">
-                        <span className="admin-name">Admin User</span>
-                        <span className="admin-role">Quản trị viên</span>
+                        <span className="admin-name">{user?.fullName || user?.username || 'Admin User'}</span>
+                        <span className="admin-role">{user?.role === 'admin' ? 'Quản trị viên' : 'Nhân viên'}</span>
                     </div>
                 </div>
-                <button className="btn-logout">Đăng xuất</button>
+                <button className="btn-logout" onClick={onLogout}>Đăng xuất</button>
             </div>
         </aside>
     );

@@ -19,8 +19,8 @@ const OrderItemRow = React.memo(({ item, index, books, onUpdate, onRemove }) => 
                     required
                 >
                     <option value="">-- Chọn sách --</option>
-                    {books.map(b => (
-                        <option key={b.id} value={b.id}>{b.title} (Giá: {b.price.toLocaleString()}đ)</option>
+                    {Array.isArray(books) && books.map(b => (
+                        <option key={b.id} value={b.id}>{b.title} (Giá: {(b.price || 0).toLocaleString()}đ)</option>
                     ))}
                 </select>
             </td>
@@ -32,7 +32,7 @@ const OrderItemRow = React.memo(({ item, index, books, onUpdate, onRemove }) => 
                     onChange={(e) => onUpdate(index, 'qty', parseInt(e.target.value) || 0)}
                 />
             </td>
-            <td className="txt-bold">{(item.qty * item.price).toLocaleString()}đ</td>
+            <td className="txt-bold">{(item.qty * (item.price || 0)).toLocaleString()}đ</td>
             <td>
                 <button type="button" className="btn-remove-item" onClick={() => onRemove(index)}>
                     <FiTrash2 />
@@ -47,16 +47,21 @@ const OrderManager = ({ setCurrentMenu }) => {
     const [books, setBooks] = useState([]);
     const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-        fetchOrders();
-        fetchBooks();
-    }, []);
+    // PAGINATION STATES
+    const [currentPage, setCurrentPage] = useState(1);
+    const [totalPages, setTotalPages] = useState(1);
+    const [totalItems, setTotalItems] = useState(0);
+    const itemsPerPage = 10;
+
 
     const fetchOrders = async () => {
+        setLoading(true);
         try {
-            const res = await fetch(`${API_URL}/orders`);
+            const res = await fetch(`${API_URL}/orders?page=${currentPage}&limit=${itemsPerPage}&search=${searchTerm}&status=${statusFilter}`);
             const data = await res.json();
-            setOrders(Array.isArray(data) ? data : []);
+            setOrders(data.orders || []);
+            setTotalPages(data.totalPages || 1);
+            setTotalItems(data.total || 0);
             setLoading(false);
         } catch (err) {
             console.error("Lỗi khi tải đơn hàng:", err);
@@ -66,9 +71,9 @@ const OrderManager = ({ setCurrentMenu }) => {
 
     const fetchBooks = async () => {
         try {
-            const res = await fetch(`${API_URL}/books`);
+            const res = await fetch(`${API_URL}/books?limit=1000`);
             const data = await res.json();
-            setBooks(data);
+            setBooks(data.books || data || []);
         } catch (err) {
             console.error(err);
         }
@@ -91,22 +96,18 @@ const OrderManager = ({ setCurrentMenu }) => {
     // Items state for Add/Edit
     const [orderItems, setOrderItems] = useState([{ bookId: '', qty: 1, price: 0 }]);
 
-    // 3. XỬ LÝ LOGIC
-    const filteredOrders = useMemo(() => {
-        return orders.filter(order => {
-            const matchesSearch = 
-                order.id.toLowerCase().includes(searchTerm.toLowerCase()) || 
-                order.customer.toLowerCase().includes(searchTerm.toLowerCase());
-            
-            const matchesStatus = statusFilter === 'all' || order.status === statusFilter;
-            
-            return matchesSearch && matchesStatus;
-        });
-    }, [orders, searchTerm, statusFilter]);
+    useEffect(() => {
+        fetchOrders();
+        fetchBooks();
+    }, [currentPage, searchTerm, statusFilter]);
 
+    // 3. XỬ LÝ LOGIC
+    // Không cần filteredOrders cục bộ nữa vì đã lọc từ Backend
     const clearFilters = () => {
         setFilters({ date: '', minTotal: '', maxTotal: '' });
         setStatusFilter('all');
+        setSearchTerm('');
+        setCurrentPage(1);
     };
 
     const handleRefresh = () => {
@@ -296,69 +297,104 @@ const OrderManager = ({ setCurrentMenu }) => {
                 {loading ? (
                     <div className="loading-state">Đang tải danh sách đơn hàng...</div>
                 ) : (
-                    <table className="order-table">
-                        <thead>
-                            <tr>
-                                <th>Mã đơn</th>
-                                <th>Khách hàng</th>
-                                <th>Ngày đặt</th>
-                                <th>Tổng tiền</th>
-                                <th>Trạng thái</th>
-                                <th>Thao tác</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {filteredOrders.map((order) => (
-                                <tr key={order.id}>
-                                    <td><span className="id-badge blue">{order.id}</span></td>
-                                    <td className="txt-bold">{order.customer}</td>
-                                    <td className="txt-gray">{new Date(order.createdAt).toLocaleDateString('vi-VN')}</td>
-                                    <td className="txt-bold color-primary">{formatPrice(order.totalAmount)}</td>
-                                    <td>
-                                        <span className={`badge-status ${order.status === 'Chờ xác nhận' ? 'pending' : order.status === 'Đã xác nhận' ? 'confirmed' : 'completed'}`}>
-                                            {order.status}
-                                        </span>
-                                    </td>
-                                    <td className="action-cell">
-                                        <div className="action-button-group">
-                                            <button className="btn-view-detail" onClick={() => {
-                                                setSelectedOrder(order);
-                                                setIsViewModalOpen(true);
-                                            }}>
-                                                <FiEye /> Chi tiết
-                                            </button>
-                                            <button className="btn-more-circle" onClick={() => setActiveMenuId(activeMenuId === order.id ? null : order.id)}>
-                                                <FiMoreVertical />
-                                            </button>
-                                            
-                                            {activeMenuId === order.id && (
-                                                <>
-                                                    <div className="menu-backdrop-transparent" onClick={() => setActiveMenuId(null)}></div>
-                                                    <div className="order-dropdown">
-                                                        <div className="dropdown-label">Cập nhật trạng thái</div>
-                                                        {order.status !== 'Đã xác nhận' && order.status !== 'Hoàn thành' && (
-                                                            <button onClick={() => handleUpdateStatus(order.id, 'Đã xác nhận')}>
-                                                                <FiCheckCircle className="txt-blue" /> Xác nhận đơn
-                                                            </button>
-                                                        )}
-                                                        {order.status !== 'Hoàn thành' && (
-                                                            <button onClick={() => handleUpdateStatus(order.id, 'Hoàn thành')}>
-                                                                <FiCheckCircle className="txt-green" /> Hoàn thành & Xuất kho
-                                                            </button>
-                                                        )}
-                                                        <div className="dropdown-divider"></div>
-                                                        <button className="txt-red" onClick={() => handleDeleteOrder(order.id)}>
-                                                            <FiTrash2 /> Xóa đơn hàng
-                                                        </button>
-                                                    </div>
-                                                </>
-                                            )}
-                                        </div>
-                                    </td>
+                    <>
+                        <table className="order-table">
+                            <thead>
+                                <tr>
+                                    <th>Mã đơn</th>
+                                    <th>Khách hàng</th>
+                                    <th>Ngày đặt</th>
+                                    <th>Tổng tiền</th>
+                                    <th>Trạng thái</th>
+                                    <th>Thao tác</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {Array.isArray(orders) && orders.map((order) => (
+                                    <tr key={order.id}>
+                                        <td><span className="id-badge blue">{order.id}</span></td>
+                                        <td className="txt-bold">{order.customer}</td>
+                                        <td className="txt-gray">
+                                            {order.createdAt ? new Date(order.createdAt).toLocaleDateString('vi-VN') : '---'}
+                                        </td>
+                                        <td className="txt-bold color-primary">{formatPrice(order.totalAmount)}</td>
+                                        <td>
+                                            <span className={`badge-status ${order.status === 'Chờ xác nhận' ? 'pending' : order.status === 'Đã xác nhận' ? 'confirmed' : 'completed'}`}>
+                                                {order.status}
+                                            </span>
+                                        </td>
+                                        <td className="action-cell">
+                                            <div className="action-button-group">
+                                                <button className="btn-view-detail" onClick={() => {
+                                                    setSelectedOrder(order);
+                                                    setIsViewModalOpen(true);
+                                                }}>
+                                                    <FiEye /> Chi tiết
+                                                </button>
+                                                <button className="btn-more-circle" onClick={() => setActiveMenuId(activeMenuId === order.id ? null : order.id)}>
+                                                    <FiMoreVertical />
+                                                </button>
+                                                
+                                                {activeMenuId === order.id && (
+                                                    <>
+                                                        <div className="menu-backdrop-transparent" onClick={() => setActiveMenuId(null)}></div>
+                                                        <div className="order-dropdown">
+                                                            <div className="dropdown-label">Cập nhật trạng thái</div>
+                                                            {order.status !== 'Đã xác nhận' && order.status !== 'Hoàn thành' && (
+                                                                <button onClick={() => handleUpdateStatus(order.id, 'Đã xác nhận')}>
+                                                                    <FiCheckCircle className="txt-blue" /> Xác nhận đơn
+                                                                </button>
+                                                            )}
+                                                            {order.status !== 'Hoàn thành' && (
+                                                                <button onClick={() => handleUpdateStatus(order.id, 'Hoàn thành')}>
+                                                                    <FiCheckCircle className="txt-green" /> Hoàn thành & Xuất kho
+                                                                </button>
+                                                            )}
+                                                            <div className="dropdown-divider"></div>
+                                                            <button className="txt-red" onClick={() => handleDeleteOrder(order.id)}>
+                                                                <FiTrash2 /> Xóa đơn hàng
+                                                            </button>
+                                                        </div>
+                                                    </>
+                                                )}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        
+                        <footer className="order-footer" style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 10px' }}>
+                            <p className="pagination-info" style={{ color: '#64748B', fontSize: '14px' }}>
+                                Hiển thị {orders.length > 0 ? (currentPage - 1) * itemsPerPage + 1 : 0} đến {Math.min(currentPage * itemsPerPage, totalItems)} trong tổng số {totalItems} đơn hàng
+                            </p>
+                            <div className="pagination-controls" style={{ display: 'flex', gap: '5px' }}>
+                                <button className="btn-page" style={{ padding: '6px 12px', border: '1px solid #E2E8F0', borderRadius: '6px', background: 'white', cursor: 'pointer' }} 
+                                    onClick={() => setCurrentPage(prev => Math.max(prev - 1, 1))} disabled={currentPage === 1}>
+                                    <FiChevronLeft /> Trước
+                                </button>
+                                {Array.from({ length: Math.min(5, totalPages) }, (_, i) => (
+                                    <button key={i + 1} 
+                                        style={{ 
+                                            padding: '6px 12px', 
+                                            border: '1px solid #E2E8F0', 
+                                            borderRadius: '6px', 
+                                            background: currentPage === (i + 1) ? '#3B82F6' : 'white',
+                                            color: currentPage === (i + 1) ? 'white' : 'inherit',
+                                            cursor: 'pointer' 
+                                        }}
+                                        onClick={() => setCurrentPage(i + 1)}
+                                    >
+                                        {i + 1}
+                                    </button>
+                                ))}
+                                <button className="btn-page" style={{ padding: '6px 12px', border: '1px solid #E2E8F0', borderRadius: '6px', background: 'white', cursor: 'pointer' }}
+                                    onClick={() => setCurrentPage(prev => Math.min(prev + 1, totalPages))} disabled={currentPage === totalPages}>
+                                    Sau <FiChevronRight />
+                                </button>
+                            </div>
+                        </footer>
+                    </>
                 )}
             </main>
 
@@ -404,7 +440,7 @@ const OrderManager = ({ setCurrentMenu }) => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {orderItems.map((item, index) => (
+                                            {Array.isArray(orderItems) && orderItems.map((item, index) => (
                                                 <OrderItemRow 
                                                     key={index}
                                                     item={item}

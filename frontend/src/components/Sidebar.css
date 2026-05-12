@@ -86,7 +86,8 @@
 .btn-logout {
     background: none;
     border: none;
-    color: #6B7280;
+    color: #EF4444; /* Màu đỏ */
+    font-weight: 600;
     cursor: pointer;
     font-size: 14px;
     padding: 0;

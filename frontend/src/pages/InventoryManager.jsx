@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import axios from 'axios';
 import {
-    FiRotateCw, FiPlus, FiX, FiPackage, FiTruck, FiCornerUpLeft, FiAlertCircle, FiTrendingUp, FiTrendingDown, FiClock, FiFileText, FiUser, FiPrinter, FiPlusCircle, FiTrash2, FiSearch, FiPhone, FiMapPin
+    FiRotateCw, FiPlus, FiX, FiPackage, FiTruck, FiCornerUpLeft, FiAlertCircle, FiTrendingUp, FiTrendingDown, FiClock, FiFileText, FiUser, FiPrinter, FiPlusCircle, FiTrash2, FiSearch, FiPhone, FiMapPin, FiChevronLeft, FiChevronRight
 } from 'react-icons/fi';
 import Swal from 'sweetalert2';
 import './InventoryManager.css';
@@ -19,8 +19,8 @@ const ReceiptItemRow = React.memo(({ item, index, books, onUpdate, onRemove }) =
                     required
                 >
                     <option value="">-- Chọn sách --</option>
-                    {books.map(b => (
-                        <option key={b.id} value={b.id}>{b.title} (Tồn: {b.quantity})</option>
+                    {Array.isArray(books) && books.map(b => (
+                        <option key={b.id} value={b.id}>{b.title} (Giá: {(b.price || 0).toLocaleString()}đ)</option>
                     ))}
                 </select>
             </td>
@@ -39,7 +39,7 @@ const ReceiptItemRow = React.memo(({ item, index, books, onUpdate, onRemove }) =
                     onChange={(e) => onUpdate(index, 'price', parseInt(e.target.value) || 0)}
                 />
             </td>
-            <td className="txt-bold">{(item.quantity * item.price).toLocaleString()}đ</td>
+            <td className="txt-bold">{(item.quantity * (item.price || 0)).toLocaleString()}đ</td>
             <td>
                 <button type="button" className="btn-remove-item" onClick={() => onRemove(index)}>
                     <FiTrash2 />
@@ -57,44 +57,68 @@ const InventoryManager = () => {
     const [loading, setLoading] = useState(true);
     const [books, setBooks] = useState([]); // For selection in modals
 
+    // PAGINATION FOR INVENTORY TAB
+    const [invPage, setInvPage] = useState(1);
+    const [invTotalPages, setInvTotalPages] = useState(1);
+    const [invTotalItems, setInvTotalItems] = useState(0);
+
     // PROFESSIONAL RECEIPT SYSTEM STATES
     const [receipts, setReceipts] = useState([]);
     const [isReceiptModalOpen, setIsReceiptModalOpen] = useState(false);
     const [receiptType, setReceiptType] = useState('NHAP'); // 'NHAP' hoặc 'XUAT'
     const [receiptItems, setReceiptItems] = useState([{ bookId: '', quantity: 1, price: 0 }]);
     const [selectedReceipt, setSelectedReceipt] = useState(null); // Để xem chi tiết/in
+    const [isPrintModalOpen, setIsPrintModalOpen] = useState(false);
+
+    // PAGINATION STATES
+    const [receiptPage, setReceiptPage] = useState(1);
+    const [receiptTotalPages, setReceiptTotalPages] = useState(1);
+    const [receiptTotalItems, setReceiptTotalItems] = useState(0);
+    const itemsPerPage = 10;
 
     useEffect(() => {
         fetchData();
         fetchBooks();
-    }, [activeTab]);
+    }, [activeTab, receiptPage, invPage]);
+
 
     const fetchData = async () => {
         setLoading(true);
         try {
-            // Tải song song cả danh sách sách và lịch sử để thống kê luôn đúng
-            const [booksRes, historyRes] = await Promise.all([
-                axios.get(`${API_URL}/books`),
-                axios.get(`${API_URL}/inventory/history`)
-            ]);
+            // 1. Tải Tồn kho có phân trang (cho tab inventory)
+            const booksRes = await axios.get(`${API_URL}/books`, {
+                params: { page: invPage, limit: itemsPerPage }
+            });
+            setInventoryData(booksRes.data.books || []);
+            setInvTotalPages(booksRes.data.totalPages || 1);
+            setInvTotalItems(booksRes.data.total || 0);
 
-            setInventoryData(booksRes.data);
-            setBooks(booksRes.data); // Cập nhật luôn danh sách cho Modal
+            // 2. Tải toàn bộ sách (cho Modal selection và Stats)
+            const allBooksRes = await axios.get(`${API_URL}/books?limit=1000`);
+            setBooks(allBooksRes.data.books || []); 
             
-            const fullHistory = historyRes.data;
-            // Lưu lại lịch sử đầy đủ để stats useMemo tính toán chính xác
+            // 3. Tải lịch sử
+            const historyRes = await axios.get(`${API_URL}/inventory/history`);
+            
+            const fullHistory = historyRes.data || [];
             setAllHistory(fullHistory); 
 
-            // Cập nhật historyData hiển thị theo tab
-            if (activeTab === 'import') {
-                setHistoryData(fullHistory.filter(h => h.type === 'NHAP'));
-            } else if (activeTab === 'export') {
-                setHistoryData(fullHistory.filter(h => h.type === 'XUAT'));
+            if (Array.isArray(fullHistory)) {
+                if (activeTab === 'import') {
+                    setHistoryData(fullHistory.filter(h => h.type === 'NHAP'));
+                } else if (activeTab === 'export') {
+                    setHistoryData(fullHistory.filter(h => h.type === 'XUAT'));
+                }
             }
 
-            // Tải danh sách phiếu
-            const receiptsRes = await axios.get(`${API_URL}/warehouse/receipts`);
-            setReceipts(receiptsRes.data);
+            // Tải danh sách phiếu có PHÂN TRANG
+            const receiptsRes = await axios.get(`${API_URL}/warehouse/receipts`, {
+                params: { page: receiptPage, limit: itemsPerPage }
+            });
+            setReceipts(receiptsRes.data.receipts || []);
+            setReceiptTotalPages(receiptsRes.data.totalPages || 1);
+            setReceiptTotalItems(receiptsRes.data.total || 0);
+
         } catch (err) {
             console.error("Lỗi fetch kho:", err);
             Swal.fire({
@@ -109,18 +133,21 @@ const InventoryManager = () => {
 
     const fetchBooks = async () => {
         try {
-            const res = await axios.get(`${API_URL}/books`);
-            setBooks(res.data);
+            const res = await axios.get(`${API_URL}/books?limit=1000`);
+            setBooks(res.data.books || res.data || []);
         } catch (err) {
             console.error(err);
         }
     };
 
     const stats = useMemo(() => {
-        const totalStock = inventoryData.reduce((sum, item) => sum + (item.quantity || 0), 0);
-        const lowStockCount = inventoryData.filter(item => item.quantity < 10).length;
-        const totalImports = allHistory.filter(h => h.type === 'NHAP').length;
-        const totalExports = allHistory.filter(h => h.type === 'XUAT').length;
+        const iData = Array.isArray(inventoryData) ? inventoryData : [];
+        const hData = Array.isArray(allHistory) ? allHistory : [];
+        
+        const totalStock = iData.reduce((sum, item) => sum + (item.quantity || 0), 0);
+        const lowStockCount = iData.filter(item => item.quantity < 10).length;
+        const totalImports = hData.filter(h => h.type === 'NHAP').length;
+        const totalExports = hData.filter(h => h.type === 'XUAT').length;
         
         return { totalStock, lowStockCount, totalImports, totalExports };
     }, [inventoryData, allHistory]);
@@ -295,34 +322,58 @@ const InventoryManager = () => {
                         <FiClock className="spin" /> Đang tải dữ liệu kho hàng...
                     </div>
                 ) : activeTab === 'inventory' ? (
-                    <table className="inventory-table">
-                        <thead>
-                            <tr>
-                                <th>Mã sách</th>
-                                <th>Tên sản phẩm</th>
-                                <th>Phân loại</th>
-                                <th>Số lượng tồn</th>
-                                <th>Đơn vị</th>
-                                <th>Trạng thái</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            {inventoryData.map(book => (
-                                <tr key={book.id}>
-                                    <td><span className="id-badge">{book.id}</span></td>
-                                    <td className="txt-bold">{book.title}</td>
-                                    <td>{book.Category?.name || book.categoryId}</td>
-                                    <td className="txt-bold" style={{ fontSize: '16px' }}>{book.quantity}</td>
-                                    <td>{book.unit}</td>
-                                    <td>
-                                        <span className={`badge ${book.quantity < 10 ? 'badge-danger' : 'badge-success'}`}>
-                                            {book.quantity < 10 ? 'Cần nhập hàng' : 'Đủ tồn kho'}
-                                        </span>
-                                    </td>
+                    <>
+                        <table className="inventory-table">
+                            <thead>
+                                <tr>
+                                    <th>Mã sách</th>
+                                    <th>Tên sản phẩm</th>
+                                    <th>Phân loại</th>
+                                    <th>Số lượng tồn</th>
+                                    <th>Đơn vị</th>
+                                    <th>Trạng thái</th>
                                 </tr>
-                            ))}
-                        </tbody>
-                    </table>
+                            </thead>
+                            <tbody>
+                                {Array.isArray(inventoryData) && inventoryData.map(book => (
+                                    <tr key={book.id}>
+                                        <td><span className="id-badge">{book.id}</span></td>
+                                        <td className="txt-bold">{book.title}</td>
+                                        <td>{book.Category?.name || book.categoryId}</td>
+                                        <td className="txt-bold" style={{ fontSize: '16px' }}>{book.quantity}</td>
+                                        <td>{book.unit}</td>
+                                        <td>
+                                            <span className={`badge ${book.quantity < 10 ? 'badge-danger' : 'badge-success'}`}>
+                                                {book.quantity < 10 ? 'Cần nhập hàng' : 'Đủ tồn kho'}
+                                            </span>
+                                        </td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        
+                        <footer className="inventory-footer" style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <p className="pagination-info">
+                                Hiển thị {inventoryData.length > 0 ? (invPage - 1) * itemsPerPage + 1 : 0} đến {Math.min(invPage * itemsPerPage, invTotalItems)} trong tổng số {invTotalItems} mục
+                            </p>
+                            <div className="pagination-controls" style={{ display: 'flex', gap: '5px' }}>
+                                <button className="btn-page" onClick={() => setInvPage(prev => Math.max(prev - 1, 1))} disabled={invPage === 1}>
+                                    <FiChevronLeft /> Trước
+                                </button>
+                                {Array.from({ length: Math.min(5, invTotalPages) }, (_, i) => {
+                                    let p = i + 1;
+                                    return (
+                                        <button key={p} className={`btn-page ${invPage === p ? 'active' : ''}`} onClick={() => setInvPage(p)}>
+                                            {p}
+                                        </button>
+                                    );
+                                })}
+                                <button className="btn-page" onClick={() => setInvPage(prev => Math.min(prev + 1, invTotalPages))} disabled={invPage === invTotalPages}>
+                                    Sau <FiChevronRight />
+                                </button>
+                            </div>
+                        </footer>
+                    </>
                 ) : activeTab === 'receipts' ? (
                     <div className="receipts-list">
                         <table className="inventory-table">
@@ -362,6 +413,25 @@ const InventoryManager = () => {
                                 ))}
                             </tbody>
                         </table>
+
+                        <footer className="inventory-footer" style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <p className="pagination-info">
+                                Hiển thị {receipts.length > 0 ? (receiptPage - 1) * itemsPerPage + 1 : 0} đến {Math.min(receiptPage * itemsPerPage, receiptTotalItems)} trong tổng số {receiptTotalItems} mục
+                            </p>
+                            <div className="pagination-controls" style={{ display: 'flex', gap: '5px' }}>
+                                <button className="btn-page" onClick={() => setReceiptPage(prev => Math.max(prev - 1, 1))} disabled={receiptPage === 1}>
+                                    <FiChevronLeft /> Trước
+                                </button>
+                                {Array.from({ length: Math.min(5, receiptTotalPages) }, (_, i) => (
+                                    <button key={i + 1} className={`btn-page ${receiptPage === (i + 1) ? 'active' : ''}`} onClick={() => setReceiptPage(i + 1)}>
+                                        {i + 1}
+                                    </button>
+                                ))}
+                                <button className="btn-page" onClick={() => setReceiptPage(prev => Math.min(prev + 1, receiptTotalPages))} disabled={receiptPage === receiptTotalPages}>
+                                    Sau <FiChevronRight />
+                                </button>
+                            </div>
+                        </footer>
                     </div>
                 ) : (
                     <table className="inventory-table">
@@ -375,7 +445,7 @@ const InventoryManager = () => {
                             </tr>
                         </thead>
                         <tbody>
-                            {historyData.map((h, i) => (
+                            {Array.isArray(historyData) && historyData.map((h, i) => (
                                 <tr key={i}>
                                     <td style={{ color: '#64748B' }}>{new Date(h.createdAt).toLocaleString('vi-VN')}</td>
                                     <td>

@@ -3,7 +3,11 @@ import cors from 'cors';
 import morgan from 'morgan';
 import { Sequelize, Op } from 'sequelize';
 import sequelize from './db.js';
-import { Category, Book, Order, OrderItem, StockCard, WarehouseReceipt, WarehouseReceiptItem, Notification } from './models.js';
+import jwt from 'jsonwebtoken';
+import bcrypt from 'bcryptjs';
+import { Category, Book, Order, OrderItem, StockCard, WarehouseReceipt, WarehouseReceiptItem, Notification, User } from './models.js';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your_super_secret_key_2024';
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -15,6 +19,67 @@ app.use(morgan('dev'));
 // 1. Health check
 app.get('/api/health', (req, res) => {
   res.status(200).json({ status: 'OK', timestamp: new Date() });
+});
+
+// --- AUTHENTICATION MIDDLEWARE ---
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  const token = authHeader && authHeader.split(' ')[1];
+  
+  if (!token) return res.status(401).json({ error: 'Vui lòng đăng nhập để tiếp tục' });
+
+  jwt.verify(token, JWT_SECRET, (err, user) => {
+    if (err) return res.status(403).json({ error: 'Phiên làm việc đã hết hạn' });
+    req.user = user;
+    next();
+  });
+};
+
+// --- AUTH ROUTES ---
+app.post('/api/auth/register', async (req, res) => {
+  try {
+    const { username, password, fullName, role } = req.body;
+    const hashedPassword = await bcrypt.hash(password, 10);
+    const user = await User.create({ username, password: hashedPassword, fullName, role });
+    res.status(201).json({ message: 'Tạo tài khoản thành công' });
+  } catch (error) {
+    res.status(400).json({ error: 'Tên đăng nhập đã tồn tại' });
+  }
+});
+
+app.post('/api/auth/login', async (req, res) => {
+  try {
+    const { username, password } = req.body;
+    const user = await User.findOne({ where: { username } });
+    
+    if (!user || !(await bcrypt.compare(password, user.password))) {
+      return res.status(401).json({ error: 'Sai tên đăng nhập hoặc mật khẩu' });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, username: user.username, role: user.role, fullName: user.fullName },
+      JWT_SECRET,
+      { expiresIn: '24h' }
+    );
+
+    res.json({
+      token,
+      user: { id: user.id, username: user.username, role: user.role, fullName: user.fullName, avatar: user.avatar }
+    });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+app.get('/api/auth/me', authenticateToken, async (req, res) => {
+  try {
+    const user = await User.findByPk(req.user.id, {
+      attributes: ['id', 'username', 'fullName', 'role', 'avatar']
+    });
+    res.json(user);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
 });
 
 // --- API THÔNG BÁO ---
@@ -119,8 +184,41 @@ app.delete('/api/categories/:id', async (req, res) => {
 // 3. BOOKS CRUD
 app.get('/api/books', async (req, res) => {
   try {
-    const books = await Book.findAll({ include: [Category] });
-    res.json(books);
+    const { page, limit, search, categoryId, status } = req.query;
+    const p = parseInt(page) || 1;
+    const l = parseInt(limit) || 10;
+    const offset = (p - 1) * l;
+
+    const where = {};
+    
+    if (search) {
+      where[Op.or] = [
+        { title: { [Op.iLike]: `%${search}%` } },
+        { id: { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+    if (categoryId) where.categoryId = categoryId;
+    if (status) {
+      // Vì status là VIRTUAL, ta không thể lọc trực tiếp trong DB bằng where.
+      // Tuy nhiên, logic status dựa trên quantity, nên ta lọc theo quantity.
+      if (status === 'Còn hàng') where.quantity = { [Op.gt]: 5 };
+      if (status === 'Sắp hết') where.quantity = { [Op.lte]: 5 };
+    }
+
+    const { count, rows } = await Book.findAndCountAll({ 
+      where,
+      include: [Category],
+      limit: l,
+      offset: offset,
+      order: [['createdAt', 'DESC']]
+    });
+
+    res.json({
+      total: count,
+      totalPages: Math.ceil(count / l),
+      currentPage: p,
+      books: rows
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -164,11 +262,36 @@ app.delete('/api/books/:id', async (req, res) => {
 // 4. ORDERS CRUD
 app.get('/api/orders', async (req, res) => {
   try {
-    const orders = await Order.findAll({ 
+    const { page, limit, search, status } = req.query;
+    const p = parseInt(page) || 1;
+    const l = parseInt(limit) || 10;
+    const offset = (p - 1) * l;
+
+    const where = {};
+    if (search) {
+      where[Op.or] = [
+        { id: { [Op.iLike]: `%${search}%` } },
+        { customer: { [Op.iLike]: `%${search}%` } }
+      ];
+    }
+    if (status && status !== 'all') {
+      where.status = status;
+    }
+
+    const { count, rows } = await Order.findAndCountAll({ 
+      where,
       include: [{ model: OrderItem, include: [Book] }],
+      limit: l,
+      offset: offset,
       order: [['createdAt', 'DESC']]
     });
-    res.json(orders);
+
+    res.json({
+      total: count,
+      totalPages: Math.ceil(count / l),
+      currentPage: p,
+      orders: rows
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -344,11 +467,23 @@ app.post('/api/inventory/adjust', async (req, res) => {
 // 6. WAREHOUSE RECEIPTS (NEW PROFESSIONAL SYSTEM)
 app.get('/api/warehouse/receipts', async (req, res) => {
   try {
-    const receipts = await WarehouseReceipt.findAll({
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const offset = (page - 1) * limit;
+
+    const { count, rows } = await WarehouseReceipt.findAndCountAll({
       include: [{ model: WarehouseReceiptItem, include: [Book] }],
+      limit,
+      offset,
       order: [['createdAt', 'DESC']]
     });
-    res.json(receipts);
+
+    res.json({
+      total: count,
+      totalPages: Math.ceil(count / limit),
+      currentPage: page,
+      receipts: rows
+    });
   } catch (error) {
     console.error('LỖI GET RECEIPTS:', error);
     res.status(500).json({ error: error.message });
@@ -476,6 +611,12 @@ app.get('/api/stats', async (req, res) => {
     
     const orders = await Order.findAll();
     const totalRevenue = orders.reduce((sum, order) => sum + (order.totalAmount || 0), 0);
+    
+    const lowStockCount = await Book.count({
+      where: {
+        quantity: { [Op.lte]: 5 }
+      }
+    });
 
     // 1. Dữ liệu biểu đồ phân bổ thể loại (Dùng cho Pie Chart)
     const categoryStats = await Category.findAll({ include: [{ model: Book }] });
@@ -516,10 +657,16 @@ app.get('/api/stats', async (req, res) => {
         h.type === 'XUAT'
       ).reduce((sum, h) => sum + Math.abs(h.change), 0);
 
+      const revenue = orders.filter(o => 
+        new Date(o.createdAt).getMonth() === monthIdx && 
+        new Date(o.createdAt).getFullYear() === year
+      ).reduce((sum, o) => sum + (o.totalAmount || 0), 0);
+
       monthlyData.push({
         name: `${monthNames[monthIdx]}`,
         nhap: imports,
-        xuat: exports
+        xuat: exports,
+        doanhthu: revenue
       });
     }
 
@@ -544,6 +691,7 @@ app.get('/api/stats', async (req, res) => {
       totalCategories,
       totalOrders,
       totalRevenue,
+      lowStockCount,
       categoryData,
       monthlyData,
       recentActivities
