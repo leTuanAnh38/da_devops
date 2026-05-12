@@ -5,6 +5,7 @@ import {
 } from 'react-icons/fi';
 import Swal from 'sweetalert2';
 import './InventoryManager.css';
+import { exportToExcel } from '../utils/excelExport';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
@@ -74,12 +75,18 @@ const InventoryManager = () => {
     const [receiptPage, setReceiptPage] = useState(1);
     const [receiptTotalPages, setReceiptTotalPages] = useState(1);
     const [receiptTotalItems, setReceiptTotalItems] = useState(0);
+
+    // PAGINATION FOR HISTORY TAB
+    const [histPage, setHistPage] = useState(1);
+    const [histTotalPages, setHistTotalPages] = useState(1);
+    const [histTotalItems, setHistTotalItems] = useState(0);
+
     const itemsPerPage = 10;
 
     useEffect(() => {
         fetchData();
         fetchBooks();
-    }, [activeTab, receiptPage, invPage]);
+    }, [activeTab, receiptPage, invPage, histPage]);
 
 
     const fetchData = async () => {
@@ -97,19 +104,26 @@ const InventoryManager = () => {
             const allBooksRes = await axios.get(`${API_URL}/books?limit=1000`);
             setBooks(allBooksRes.data.books || []); 
             
-            // 3. Tải lịch sử
-            const historyRes = await axios.get(`${API_URL}/inventory/history`);
-            
-            const fullHistory = historyRes.data || [];
-            setAllHistory(fullHistory); 
+            // 3. Tải lịch sử CÓ PHÂN TRANG & FILTER THEO TAB
+            let hType = null;
+            if (activeTab === 'import') hType = 'NHAP';
+            if (activeTab === 'export') hType = 'XUAT';
 
-            if (Array.isArray(fullHistory)) {
-                if (activeTab === 'import') {
-                    setHistoryData(fullHistory.filter(h => h.type === 'NHAP'));
-                } else if (activeTab === 'export') {
-                    setHistoryData(fullHistory.filter(h => h.type === 'XUAT'));
+            const historyRes = await axios.get(`${API_URL}/inventory/history`, {
+                params: { 
+                    page: histPage, 
+                    limit: itemsPerPage,
+                    type: hType
                 }
-            }
+            });
+            
+            setHistoryData(historyRes.data.history || []);
+            setHistTotalPages(historyRes.data.totalPages || 1);
+            setHistTotalItems(historyRes.data.total || 0);
+
+            // 4. Tải TOÀN BỘ lịch sử cho thống kê (chỉ cần chạy 1 lần hoặc khi có thay đổi lớn)
+            const allHistoryRes = await axios.get(`${API_URL}/inventory/history?limit=1000`);
+            setAllHistory(allHistoryRes.data.history || []);
 
             // Tải danh sách phiếu có PHÂN TRANG
             const receiptsRes = await axios.get(`${API_URL}/warehouse/receipts`, {
@@ -250,6 +264,62 @@ const InventoryManager = () => {
 
     const handlePrint = () => window.print();
 
+    const handleExportExcel = () => {
+        let exportData = [];
+        let fileName = '';
+        let sheetName = '';
+
+        if (activeTab === 'inventory') {
+            if (inventoryData.length === 0) return Swal.fire('Thông báo', 'Không có dữ liệu tồn kho', 'info');
+            exportData = inventoryData.map(item => ({
+                'Mã sách': item.id,
+                'Tên sách': item.title,
+                'Thể loại': item.Category?.name || '---',
+                'Số lượng tồn': item.quantity,
+                'Đơn vị': item.unit,
+                'Giá tiền': item.price,
+                'Trạng thái': item.status
+            }));
+            fileName = `Bao_cao_ton_kho_${new Date().getTime()}`;
+            sheetName = 'TonKho';
+        } 
+        else if (activeTab === 'import' || activeTab === 'export') {
+            if (historyData.length === 0) return Swal.fire('Thông báo', 'Không có dữ liệu thẻ kho', 'info');
+            exportData = historyData.map(h => ({
+                'Ngày giờ': new Date(h.createdAt).toLocaleString('vi-VN'),
+                'Mã sách': h.bookId,
+                'Tên sách': h.Book?.title || '---',
+                'Loại': h.type === 'NHAP' ? 'Nhập kho' : 'Xuất kho',
+                'Số lượng thay đổi': h.change,
+                'Tồn sau thay đổi': h.currentStock,
+                'Ghi chú': h.note || ''
+            }));
+            fileName = `Lich_su_${activeTab === 'import' ? 'nhap' : 'xuat'}_kho_${new Date().getTime()}`;
+            sheetName = 'TheKho';
+        }
+        else if (activeTab === 'receipts') {
+            if (receipts.length === 0) return Swal.fire('Thông báo', 'Không có dữ liệu chứng từ', 'info');
+            exportData = receipts.map(r => ({
+                'Mã phiếu': r.id,
+                'Loại phiếu': r.type === 'NHAP' ? 'Nhập kho' : 'Xuất kho',
+                'Đối tác': r.partnerName || '---',
+                'Người lập': r.creatorName || '---',
+                'Tổng tiền': r.totalAmount,
+                'Trạng thái': r.status,
+                'Ngày tạo': new Date(r.createdAt).toLocaleString('vi-VN')
+            }));
+            fileName = `Danh_sach_chung_tu_${new Date().getTime()}`;
+            sheetName = 'ChungTu';
+        }
+
+        const success = exportToExcel(exportData, fileName, sheetName);
+        if (success) {
+            Swal.fire('Thành công', 'Đã xuất file báo cáo thành công', 'success');
+        } else {
+            Swal.fire('Thất bại', 'Lỗi khi xuất báo cáo', 'error');
+        }
+    };
+
     return (
         <div className="inventory-container">
             <header className="inventory-header">
@@ -260,6 +330,9 @@ const InventoryManager = () => {
                 <div className="header-actions">
                     <button className="btn-icon-square" onClick={fetchData} title="Làm mới">
                         <FiRotateCw />
+                    </button>
+                    <button className="btn-export-excel" onClick={handleExportExcel} title="Xuất báo cáo Excel">
+                        <FiFileText /> Xuất báo cáo
                     </button>
                     <button className="btn-import-action" onClick={() => openReceiptModal('NHAP')}>
                         <FiPlus /> Lập phiếu nhập
@@ -434,6 +507,7 @@ const InventoryManager = () => {
                         </footer>
                     </div>
                 ) : (
+                    <>
                     <table className="inventory-table">
                         <thead>
                             <tr>
@@ -467,6 +541,29 @@ const InventoryManager = () => {
                             ))}
                         </tbody>
                     </table>
+                    
+                    <footer className="inventory-footer" style={{ marginTop: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                        <p className="pagination-info">
+                            Hiển thị {historyData.length > 0 ? (histPage - 1) * itemsPerPage + 1 : 0} đến {Math.min(histPage * itemsPerPage, histTotalItems)} trong tổng số {histTotalItems} mục
+                        </p>
+                        <div className="pagination-controls" style={{ display: 'flex', gap: '5px' }}>
+                            <button className="btn-page" onClick={() => setHistPage(prev => Math.max(prev - 1, 1))} disabled={histPage === 1}>
+                                <FiChevronLeft /> Trước
+                            </button>
+                            {Array.from({ length: Math.min(5, histTotalPages) }, (_, i) => {
+                                let p = i + 1;
+                                return (
+                                    <button key={p} className={`btn-page ${histPage === p ? 'active' : ''}`} onClick={() => setHistPage(p)}>
+                                        {p}
+                                    </button>
+                                );
+                            })}
+                            <button className="btn-page" onClick={() => setHistPage(prev => Math.min(prev + 1, histTotalPages))} disabled={histPage === histTotalPages}>
+                                Sau <FiChevronRight />
+                            </button>
+                        </div>
+                    </footer>
+                    </>
                 )}
             </main>
 
@@ -570,9 +667,9 @@ const InventoryManager = () => {
                         <div className="receipt-print-area" id="print-area">
                             <div className="print-header">
                                 <div className="company-info">
-                                    <h3>HỆ THỐNG QUẢN LÝ KHO SÁCH</h3>
-                                    <p>Địa chỉ: 123 Đường Sách, TP. Hồ Chí Minh</p>
-                                    <p>Điện thoại: 0123 456 789</p>
+                                    <h3>KHO SÁCH ĐÀ NẴNG</h3>
+                                    <p>Địa chỉ: 41 Bàu Gia Thượng 1 - Cẩm Lệ - Đà Nẵng</p>
+                                    <p>Điện thoại: 0123456789</p>
                                 </div>
                                 <div className="receipt-title">
                                     <h1>PHIẾU {selectedReceipt.type === 'NHAP' ? 'NHẬP' : 'XUẤT'} KHO</h1>
