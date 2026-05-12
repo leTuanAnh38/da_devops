@@ -6,6 +6,7 @@ import {
 } from 'react-icons/fi';
 import Swal from 'sweetalert2';
 import './OrderManager.css';
+import { exportToExcel } from '../utils/excelExport';
 
 const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:5000/api';
 
@@ -255,6 +256,31 @@ const OrderManager = ({ setCurrentMenu }) => {
         return (price || 0).toLocaleString('vi-VN') + 'đ';
     };
 
+    const handleExportExcel = () => {
+        if (orders.length === 0) {
+            Swal.fire('Thông báo', 'Không có dữ liệu để xuất', 'info');
+            return;
+        }
+
+        const exportData = orders.map(order => ({
+            'Mã đơn hàng': order.id,
+            'Khách hàng': order.customer,
+            'Số điện thoại': order.phone || '---',
+            'Địa chỉ': order.address || '---',
+            'Tổng tiền': order.totalAmount,
+            'Trạng thái': order.status,
+            'Ngày tạo': new Date(order.createdAt).toLocaleString('vi-VN'),
+            'Ghi chú': order.note || ''
+        }));
+
+        const success = exportToExcel(exportData, `Danh_sach_don_hang_${new Date().getTime()}`, 'DonHang');
+        if (success) {
+            Swal.fire('Thành công', 'Đã xuất file Excel thành công', 'success');
+        } else {
+            Swal.fire('Thất bại', 'Lỗi khi xuất file Excel', 'error');
+        }
+    };
+
     return (
         <div className="order-container">
             <header className="order-header">
@@ -264,6 +290,9 @@ const OrderManager = ({ setCurrentMenu }) => {
                 </div>
                 <div className="header-actions">
                     <button className="btn-icon-square" onClick={handleRefresh} title="Làm mới"><FiRefreshCcw /></button>
+                    <button className="btn-export-excel" onClick={handleExportExcel} title="Xuất báo cáo Excel">
+                        <FiFileText /> Xuất Excel
+                    </button>
                     <button className="btn-add-order" onClick={() => setIsAddModalOpen(true)}>
                         <FiPlus /> Tạo đơn hàng mới
                     </button>

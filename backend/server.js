@@ -125,14 +125,31 @@ app.delete('/api/notifications/clear', async (req, res) => {
   }
 });
 
-// 2. INVENTORY HISTORY (ALL) - Moved to top for priority
+// 2. INVENTORY HISTORY WITH PAGINATION & FILTER
 app.get('/api/inventory/history', async (req, res) => {
   try {
-    const history = await StockCard.findAll({
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const type = req.query.type; // Optional: NHAP, XUAT
+    const offset = (page - 1) * limit;
+
+    const where = {};
+    if (type) where.type = type;
+
+    const { count, rows } = await StockCard.findAndCountAll({
+      where,
       include: [Book],
-      order: [['createdAt', 'DESC']]
+      order: [['createdAt', 'DESC']],
+      limit,
+      offset
     });
-    res.json(history);
+
+    res.json({
+      total: count,
+      totalPages: Math.ceil(count / limit),
+      currentPage: page,
+      history: rows
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }

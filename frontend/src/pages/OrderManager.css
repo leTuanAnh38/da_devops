@@ -29,6 +29,26 @@
 }
 .btn-add-order:hover { background-color: #1D4ED8; transform: translateY(-1px); box-shadow: 0 4px 12px rgba(37, 99, 235, 0.2); }
 
+.btn-export-excel {
+    background-color: #10B981;
+    color: white;
+    border: none;
+    padding: 0 20px;
+    border-radius: 8px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    transition: 0.2s;
+    height: 42px;
+}
+.btn-export-excel:hover {
+    background-color: #059669;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+
 /* TOOLBAR */
 .toolbar-container { margin-bottom: 24px; }
 .order-toolbar-aligned {
