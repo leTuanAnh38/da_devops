@@ -107,7 +107,7 @@
 .menu-backdrop-transparent { position: fixed; top: 0; left: 0; right: 0; bottom: 0; z-index: 90; }
 
 /* MODAL STYLES */
-.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 2000; }
+.modal-overlay { position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); display: flex; align-items: center; justify-content: center; z-index: 900; }
 .modal-box.large { width: 90%; max-width: 900px; max-height: 90vh; display: flex; flex-direction: column; }
 .modal-top { padding: 20px 32px; border-bottom: 1px solid #F3F4F6; display: flex; justify-content: space-between; align-items: center; background: #ffffff; }
 .modal-top h2 { font-size: 20px; font-weight: 700; color: #111827; margin: 0; display: flex; align-items: center; gap: 12px; }

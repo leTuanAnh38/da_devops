@@ -527,6 +527,10 @@ app.post('/api/warehouse/receipts', async (req, res) => {
       const book = await Book.findByPk(item.bookId, { transaction: t });
       if (!book) throw new Error(`Không tìm thấy sách mã ${item.bookId}`);
 
+      if (!item.quantity || item.quantity <= 0) {
+        throw new Error(`Số lượng sách ${book.title} phải lớn hơn 0`);
+      }
+
       const itemTotal = item.quantity * (item.price || book.price);
       totalAmount += itemTotal;
 

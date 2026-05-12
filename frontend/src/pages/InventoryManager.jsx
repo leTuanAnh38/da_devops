@@ -21,7 +21,7 @@ const ReceiptItemRow = React.memo(({ item, index, books, onUpdate, onRemove }) =
                 >
                     <option value="">-- Chọn sách --</option>
                     {Array.isArray(books) && books.map(b => (
-                        <option key={b.id} value={b.id}>{b.title} (Giá: {(b.price || 0).toLocaleString()}đ)</option>
+                        <option key={b.id} value={b.id}>{b.title} (Giá: {(b.price || 0).toLocaleString()}đ | Tồn: {b.quantity || 0})</option>
                     ))}
                 </select>
             </td>
