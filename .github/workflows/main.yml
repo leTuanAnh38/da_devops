@@ -22,10 +22,10 @@ jobs:
         run: npm install
       - name: Lint
         working-directory: ./backend
-        run: npx eslint . || echo "No lint rules yet"
+        run: npm run lint
       - name: Test
         working-directory: ./backend
-        run: npm test || echo "No tests yet"
+        run: npm test
 
   frontend-ci:
     runs-on: ubuntu-latest
@@ -40,6 +40,9 @@ jobs:
       - name: Install dependencies
         working-directory: ./frontend
         run: npm install
+      - name: Lint
+        working-directory: ./frontend
+        run: npm run lint
       - name: Build
         working-directory: ./frontend
         run: npm run build
