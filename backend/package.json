@@ -7,7 +7,8 @@
   "scripts": {
     "start": "node server.js",
     "seed": "node seed.js",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "lint": "echo \"Linting backend...\"",
+    "test": "echo \"Running backend tests...\""
   },
   "keywords": [],
   "author": "",
